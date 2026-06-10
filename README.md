@@ -4,15 +4,15 @@
 
 ## Play
 
-Open `outputs/index.html` directly, or run a local server:
+Run a local static server:
 
 ```sh
 python3 -m http.server 4181 --directory outputs
 ```
 
-Then visit `http://127.0.0.1:4181/`.
+Then visit `http://127.0.0.1:4181/`. V0.5 uses ES modules, so local server play is the supported path.
 
-## V0.4 Features
+## V0.5 Features
 
 - Five factions with distinct card identities.
 - 40+ base cards and expanded evolution cards.
@@ -21,10 +21,15 @@ Then visit `http://127.0.0.1:4181/`.
 - Summoner hero powers with once-per-turn use and awakening upgrades.
 - Deeper secrets and automatic counterplay triggers.
 - Improved AI for play, attack, and evolution decisions.
-- Balance simulation panel for 50 AI-vs-AI games.
+- ES module card data in `outputs/src/data.js`, reused by browser and Node scripts.
+- Card validation, content report, syntax check, and deterministic AI-vs-AI simulation scripts.
+- Balance simulation panel now reports empty-hand rate and board-attack snowball pressure.
 
 ## Validation
 
 ```sh
-node --check outputs/app.js
+npm run check
+npm run content
+npm run simulate -- 50
+npm run simulate -- 200
 ```

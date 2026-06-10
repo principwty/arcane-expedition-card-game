@@ -1,0 +1,8 @@
+{
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-syntax.mjs && node scripts/validate-cards.mjs",
+    "simulate": "node scripts/simulate.mjs",
+    "content": "node scripts/content-report.mjs"
+  }
+}

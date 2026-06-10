@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>奧術遠征</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app" class="app">
+      <section id="startScreen" class="start-screen">
+        <div class="brand">
+          <img src="./assets/sigil.svg" alt="" class="sigil" />
+          <div>
+            <p class="eyebrow">1v1 牌組進化卡牌原型</p>
+            <h1>奧術遠征</h1>
+            <p class="intro">選擇召喚師，在 10-15 分鐘的奇幻對戰中推進遠征軌，從三張進化牌中抉擇，讓你的牌組在戰局內成長。</p>
+          </div>
+        </div>
+        <div id="summonerGrid" class="summoner-grid"></div>
+      </section>
+
+      <section id="gameScreen" class="game-screen hidden">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">奧術遠征</p>
+            <h2 id="matchTitle">星穹學派 對 龍焰王庭</h2>
+          </div>
+          <div class="topbar-actions">
+            <button id="simulateBtn" class="button secondary">模擬 50 場</button>
+            <button id="newGameBtn" class="button secondary">新對局</button>
+            <button id="endTurnBtn" class="button primary">結束回合</button>
+          </div>
+        </header>
+
+        <section id="opponentArea" class="player-zone opponent"></section>
+        <section class="battlefield">
+          <div id="opponentArtifacts" class="side-slots"></div>
+          <div id="opponentBoard" class="board-row"></div>
+          <div id="playerBoard" class="board-row"></div>
+          <div id="playerArtifacts" class="side-slots"></div>
+        </section>
+        <section id="playerArea" class="player-zone"></section>
+        <section id="hand" class="hand"></section>
+
+        <aside class="log-panel">
+          <h3>觀測</h3>
+          <div id="metrics" class="metrics"></div>
+          <h3>平衡摘要</h3>
+          <div id="balanceSummary" class="balance-summary">尚未模擬</div>
+          <h3>戰況</h3>
+          <div id="log" class="log"></div>
+        </aside>
+      </section>
+
+      <div id="evolutionModal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-panel">
+          <div class="modal-heading">
+            <p class="eyebrow">遠征突破</p>
+            <h2>選擇一張進化牌</h2>
+          </div>
+          <div id="evolutionChoices" class="evolution-choices"></div>
+        </div>
+      </div>
+
+      <div id="resultModal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-panel result">
+          <h2 id="resultTitle">勝利</h2>
+          <p id="resultText"></p>
+          <button id="resultNewGameBtn" class="button primary">再來一局</button>
+        </div>
+      </div>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

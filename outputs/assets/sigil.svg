@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Arcane expedition sigil">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#ffd166"/>
+      <stop offset=".45" stop-color="#7dd3fc"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="320" fill="#111827"/>
+  <circle cx="160" cy="160" r="118" fill="none" stroke="url(#g)" stroke-width="10"/>
+  <path d="M160 46 236 160 160 274 84 160Z" fill="none" stroke="#f8fafc" stroke-opacity=".8" stroke-width="7"/>
+  <path d="M160 82 205 160 160 238 115 160Z" fill="url(#g)" fill-opacity=".26" stroke="#fde68a" stroke-width="5"/>
+  <circle cx="160" cy="160" r="28" fill="#0f172a" stroke="#f8fafc" stroke-width="6"/>
+  <path d="M160 22v58M160 240v58M22 160h58M240 160h58" stroke="#7dd3fc" stroke-width="8" stroke-linecap="round"/>
+  <path d="m72 72 41 41M207 207l41 41M248 72l-41 41M113 207l-41 41" stroke="#c084fc" stroke-width="6" stroke-linecap="round"/>
+</svg>

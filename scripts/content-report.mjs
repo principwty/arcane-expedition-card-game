@@ -1,4 +1,5 @@
-import { BASE_CARDS, EVOLUTION_CARDS, FACTION_LABELS, KEYWORD_LABELS } from "../outputs/src/data.js";
+import { BASE_CARDS, DEFAULT_DECK_RECIPES, EVOLUTION_CARDS, FACTION_LABELS, KEYWORD_LABELS, TYPE_LABELS } from "../outputs/src/data.js";
+import { deckStats, validateDeckRecipe } from "../outputs/src/deck-utils.js";
 import { validateCards } from "./validate-cards.mjs";
 
 const factions = Object.keys(FACTION_LABELS);
@@ -28,6 +29,18 @@ for (const [effect, count] of [...effectCounts.entries()].sort((a, b) => b[1] - 
 console.log("\n## Keywords");
 for (const [keyword, count] of [...keywordCounts.entries()].sort((a, b) => b[1] - a[1])) {
   console.log(`${KEYWORD_LABELS[keyword]} (${keyword}): ${count}`);
+}
+
+console.log("\n## Default Decks");
+for (const recipe of Object.values(DEFAULT_DECK_RECIPES)) {
+  const validation = validateDeckRecipe(recipe);
+  const stats = deckStats(recipe);
+  const curve = Object.entries(stats.curve).map(([cost, count]) => `${cost}:${count}`).join(" ");
+  const types = Object.entries(stats.types)
+    .filter(([, count]) => count > 0)
+    .map(([type, count]) => `${TYPE_LABELS[type]}:${count}`)
+    .join(" ");
+  console.log(`${recipe.name} - ${validation.ok ? "legal" : "illegal"} - curve ${curve} - ${types}`);
 }
 
 if (!validation.ok) {

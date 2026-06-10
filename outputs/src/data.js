@@ -32,6 +32,12 @@ export const KEYWORD_LABELS = {
   overwhelm: "踐踏",
 };
 
+export const DECK_RULES = {
+  size: 30,
+  maxCopies: 3,
+  storageKey: "arcane-expedition-decks-v1",
+};
+
 export const SUMMONERS = [
   {
     id: "star",
@@ -168,3 +174,29 @@ export const TOKENS = {
 export const COIN_CARD = card("coin", "星砂硬幣", 0, "spell", "neutral", "token", null, "本回合獲得 1 點法力。", ["resource"], [{ type: "gainMana", amount: 1 }]);
 export const SECOND_SUPPLY_CARD = card("second-supply", "後手補給", 0, "spell", "neutral", "token", null, "抽 1 張牌，本回合獲得 1 點法力。", ["resource"], [{ type: "draw", amount: 1 }, { type: "gainMana", amount: 1 }]);
 
+export const DEFAULT_DECK_RECIPES = Object.fromEntries(
+  SUMMONERS.map((summoner) => [
+    summoner.id,
+    {
+      id: `default-${summoner.id}`,
+      name: `${FACTION_LABELS[summoner.faction]} 預設牌組`,
+      summonerId: summoner.id,
+      cardIds: defaultDeckCardIds(summoner.faction),
+      updatedAt: "2026-06-11T00:00:00.000Z",
+    },
+  ]),
+);
+
+function defaultDeckCardIds(faction) {
+  const factionCards = BASE_CARDS.filter((item) => item.faction === faction);
+  const neutralCards = BASE_CARDS.filter((item) => item.faction === "neutral");
+  const cardIds = [];
+  for (const item of factionCards) cardIds.push(item.id, item.id, item.id);
+  for (const item of neutralCards) cardIds.push(item.id, item.id);
+  let index = 0;
+  while (cardIds.length < DECK_RULES.size) {
+    cardIds.push(factionCards[index % factionCards.length].id);
+    index += 1;
+  }
+  return cardIds.slice(0, DECK_RULES.size);
+}

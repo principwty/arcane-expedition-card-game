@@ -45,6 +45,13 @@ button {
   padding: 42px 0;
 }
 
+.builder-screen {
+  width: min(1480px, calc(100vw - 24px));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 12px 0;
+}
+
 .brand {
   display: grid;
   grid-template-columns: 132px 1fr;
@@ -133,6 +140,197 @@ h1 {
 .summoner-card p {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.summoner-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.summoner-actions .button {
+  width: 100%;
+}
+
+.builder-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1fr) minmax(220px, 1.4fr) 130px 110px;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: rgba(22, 27, 46, .78);
+}
+
+.builder-toolbar label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.builder-toolbar input,
+.builder-toolbar select {
+  min-height: 38px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.builder-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  gap: 12px;
+}
+
+.card-pool-panel,
+.deck-panel {
+  min-height: 620px;
+  border: 1px solid var(--line);
+  background: rgba(22, 27, 46, .78);
+}
+
+.builder-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.builder-panel-heading h3 {
+  margin: 0;
+}
+
+.deck-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.deck-actions .button {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.card-pool {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  max-height: calc(100vh - 178px);
+  overflow: auto;
+  padding: 12px;
+}
+
+.builder-card {
+  min-height: 236px;
+  padding: 12px;
+  color: var(--text);
+  text-align: left;
+  border-radius: 8px;
+}
+
+.builder-card .builder-card-actions {
+  display: grid;
+  grid-template-columns: 34px 1fr 34px;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.builder-card .count {
+  color: var(--gold);
+  font-weight: 800;
+  text-align: center;
+}
+
+.icon-button {
+  min-width: 34px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.deck-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.deck-summary div,
+.deck-status {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .04);
+  padding: 9px 10px;
+}
+
+.deck-summary strong {
+  display: block;
+  font-size: 18px;
+}
+
+.deck-summary span,
+.deck-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.deck-status {
+  margin: 12px;
+}
+
+.deck-status.legal {
+  border-color: rgba(134, 239, 172, .65);
+  color: var(--green);
+}
+
+.deck-status.illegal {
+  border-color: rgba(251, 113, 133, .65);
+  color: var(--red);
+}
+
+.deck-list {
+  display: grid;
+  gap: 6px;
+  max-height: calc(100vh - 346px);
+  overflow: auto;
+  padding: 0 12px 12px;
+}
+
+.deck-list-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .035);
+}
+
+.deck-list-row .meta {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .game-screen {
@@ -531,6 +729,20 @@ h1 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .builder-toolbar,
+  .builder-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .card-pool,
+  .deck-list {
+    max-height: none;
+  }
+
+  .deck-panel {
+    min-height: 0;
+  }
+
   .game-screen {
     grid-template-columns: 1fr;
   }
@@ -564,6 +776,16 @@ h1 {
   .player-zone {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .topbar-actions,
+  .deck-actions {
+    width: 100%;
+  }
+
+  .topbar-actions .button,
+  .deck-actions .button {
+    flex: 1;
   }
 
   .player-zone {

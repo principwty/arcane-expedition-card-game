@@ -1,11 +1,13 @@
 import {
   BASE_CARDS,
+  DEFAULT_DECK_RECIPES,
   EVOLUTION_CARDS,
   FACTION_LABELS,
   SUMMONERS,
   TOKENS,
   TYPE_LABELS,
 } from "../outputs/src/data.js";
+import { validateDeckRecipe } from "../outputs/src/deck-utils.js";
 
 export const SUPPORTED_EFFECTS = new Set([
   "ambushGuard",
@@ -115,7 +117,17 @@ export function validateCards() {
     if (choices.length < 3) errors.push(`${summoner.name} 可用進化牌少於 3 張`);
   }
 
-  return { ok: errors.length === 0, errors, counts: { base: BASE_CARDS.length, evolution: EVOLUTION_CARDS.length, tokens: Object.keys(TOKENS).length } };
+  for (const summoner of SUMMONERS) {
+    const recipe = DEFAULT_DECK_RECIPES[summoner.id];
+    if (!recipe) {
+      errors.push(`${summoner.name} 缺少預設牌組`);
+      continue;
+    }
+    const validation = validateDeckRecipe(recipe);
+    if (!validation.ok) errors.push(...validation.errors.map((error) => `${recipe.name}: ${error}`));
+  }
+
+  return { ok: errors.length === 0, errors, counts: { base: BASE_CARDS.length, evolution: EVOLUTION_CARDS.length, tokens: Object.keys(TOKENS).length, decks: Object.keys(DEFAULT_DECK_RECIPES).length } };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -124,5 +136,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error(result.errors.map((error) => `- ${error}`).join("\n"));
     process.exit(1);
   }
-  console.log(`Card validation passed: ${result.counts.base} base, ${result.counts.evolution} evolution, ${result.counts.tokens} tokens.`);
+  console.log(`Card validation passed: ${result.counts.base} base, ${result.counts.evolution} evolution, ${result.counts.tokens} tokens, ${result.counts.decks} default decks.`);
 }

@@ -1,6 +1,8 @@
 import {
   BASE_CARDS,
   COIN_CARD,
+  DECK_RULES,
+  DEFAULT_DECK_RECIPES,
   EVOLUTION_CARDS,
   EVOLUTION_THRESHOLDS,
   FACTION_LABELS,
@@ -10,17 +12,51 @@ import {
   TOKENS,
   TYPE_LABELS,
 } from "./src/data.js";
+import {
+  buildDeckTemplatesFromRecipe,
+  cardCounts,
+  cloneRecipe,
+  defaultDeckRecipe,
+  legalCardsForSummoner,
+  normalizeDeckRecipe,
+  summarizeDeck,
+  validateDeckRecipe,
+} from "./src/deck-utils.js";
 
 let state;
 let uid = 0;
 let rng = Math.random;
 const hasDom = typeof document !== "undefined";
+const builder = {
+  summonerId: "star",
+  activeDeckId: null,
+  recipe: null,
+  filters: { search: "", type: "all", cost: "all" },
+  savedDecks: [],
+};
 
 const els = hasDom
   ? {
       start: document.querySelector("#startScreen"),
       game: document.querySelector("#gameScreen"),
       summonerGrid: document.querySelector("#summonerGrid"),
+      builderScreen: document.querySelector("#builderScreen"),
+      builderTitle: document.querySelector("#builderTitle"),
+      deckSelect: document.querySelector("#deckSelect"),
+      deckNameInput: document.querySelector("#deckNameInput"),
+      builderSearch: document.querySelector("#builderSearch"),
+      builderType: document.querySelector("#builderType"),
+      builderCost: document.querySelector("#builderCost"),
+      cardPool: document.querySelector("#cardPool"),
+      deckList: document.querySelector("#deckList"),
+      deckSummary: document.querySelector("#deckSummary"),
+      deckStatus: document.querySelector("#deckStatus"),
+      saveDeckBtn: document.querySelector("#saveDeckBtn"),
+      copyDeckBtn: document.querySelector("#copyDeckBtn"),
+      deleteDeckBtn: document.querySelector("#deleteDeckBtn"),
+      resetDeckBtn: document.querySelector("#resetDeckBtn"),
+      startCustomBtn: document.querySelector("#startCustomBtn"),
+      backToSummonersBtn: document.querySelector("#backToSummonersBtn"),
       matchTitle: document.querySelector("#matchTitle"),
       opponentArea: document.querySelector("#opponentArea"),
       playerArea: document.querySelector("#playerArea"),
@@ -80,9 +116,9 @@ function createSeededRandom(seed) {
   };
 }
 
-function createPlayer(kind, summonerId) {
+function createPlayer(kind, summonerId, recipe = null) {
   const summoner = SUMMONERS.find((item) => item.id === summonerId);
-  const deckTemplates = buildDeckTemplates(summoner);
+  const deckTemplates = recipe ? buildDeckTemplatesFromRecipe(recipe) : buildDeckTemplates(summoner);
   return {
     kind,
     summoner,
@@ -119,24 +155,21 @@ function createPlayer(kind, summonerId) {
 }
 
 function buildDeckTemplates(summoner) {
-  const factionCards = BASE_CARDS.filter((item) => item.faction === summoner.faction);
-  const neutralCards = BASE_CARDS.filter((item) => item.faction === "neutral");
-  const deck = [];
-  for (const item of factionCards) deck.push(item, item, item);
-  for (const item of neutralCards) deck.push(item, item);
-  let index = 0;
-  while (deck.length < 30) {
-    deck.push(factionCards[index % factionCards.length]);
-    index += 1;
-  }
-  return shuffle(deck).slice(0, 30);
+  return buildDeckTemplatesFromRecipe(DEFAULT_DECK_RECIPES[summoner.id]);
 }
 
-function startMatch(playerSummonerId) {
+function startMatch(playerSummonerId, playerRecipe = null) {
+  if (playerRecipe) {
+    const validation = validateDeckRecipe(playerRecipe);
+    if (!validation.ok) {
+      showDeckStatus(validation.errors, false);
+      return;
+    }
+  }
   const aiOptions = SUMMONERS.filter((item) => item.id !== playerSummonerId);
   const aiSummonerId = aiOptions[Math.floor(rng() * aiOptions.length)].id;
   state = {
-    players: [createPlayer("玩家", playerSummonerId), createPlayer("對手", aiSummonerId)],
+    players: [createPlayer("玩家", playerSummonerId, playerRecipe), createPlayer("對手", aiSummonerId)],
     active: 0,
     turn: 1,
     logs: [],
@@ -151,6 +184,7 @@ function startMatch(playerSummonerId) {
   state.players[1].hand.push(cloneCard(COIN_CARD), cloneCard(SECOND_SUPPLY_CARD));
   startTurn(0);
   els.start.classList.add("hidden");
+  els.builderScreen.classList.add("hidden");
   els.game.classList.remove("hidden");
   log(`對局開始：${state.players[0].summoner.name} 對 ${state.players[1].summoner.name}`);
   render();
@@ -1392,18 +1426,245 @@ function keywordHelp(word) {
   return help[word] ?? word;
 }
 
+function loadDecks() {
+  if (!hasDom) return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DECK_RULES.storageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.map(normalizeDeckRecipe) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDecks(decks) {
+  if (!hasDom) return;
+  localStorage.setItem(DECK_RULES.storageKey, JSON.stringify(decks.map(normalizeDeckRecipe)));
+}
+
+function openBuilder(summonerId, deckId = null) {
+  builder.summonerId = summonerId;
+  builder.savedDecks = loadDecks();
+  builder.filters = { search: "", type: "all", cost: "all" };
+  els.builderSearch.value = "";
+  els.builderType.value = "all";
+  els.builderCost.value = "all";
+  const candidate = deckId ? findDeck(deckId) : defaultDeckRecipe(summonerId);
+  loadBuilderRecipe(candidate?.summonerId === summonerId ? candidate : defaultDeckRecipe(summonerId));
+  els.start.classList.add("hidden");
+  els.game.classList.add("hidden");
+  els.builderScreen.classList.remove("hidden");
+  renderBuilder();
+}
+
+function findDeck(deckId) {
+  if (!deckId) return null;
+  if (deckId.startsWith("default-")) return Object.values(DEFAULT_DECK_RECIPES).find((recipe) => recipe.id === deckId) ?? null;
+  return builder.savedDecks.find((deck) => deck.id === deckId) ?? null;
+}
+
+function loadBuilderRecipe(recipe) {
+  builder.recipe = cloneRecipe(normalizeDeckRecipe(recipe));
+  builder.activeDeckId = builder.recipe.id;
+}
+
+function saveCurrentDeck() {
+  const name = els.deckNameInput.value.trim() || builder.recipe.name;
+  const now = new Date().toISOString();
+  const isDefault = builder.activeDeckId?.startsWith("default-");
+  const saved = cloneRecipe(builder.recipe, {
+    id: isDefault ? `deck-${Date.now()}` : builder.recipe.id,
+    name,
+    updatedAt: now,
+  });
+  const validation = validateDeckRecipe(saved);
+  if (!validation.ok) {
+    showDeckStatus(validation.errors, false);
+    return;
+  }
+  builder.savedDecks = builder.savedDecks.filter((deck) => deck.id !== saved.id);
+  builder.savedDecks.unshift(saved);
+  saveDecks(builder.savedDecks);
+  loadBuilderRecipe(saved);
+  renderBuilder();
+}
+
+function copyCurrentDeck() {
+  const copied = cloneRecipe(builder.recipe, {
+    id: `deck-${Date.now()}`,
+    name: `${builder.recipe.name} 複製`,
+    updatedAt: new Date().toISOString(),
+  });
+  builder.savedDecks.unshift(copied);
+  saveDecks(builder.savedDecks);
+  loadBuilderRecipe(copied);
+  renderBuilder();
+}
+
+function deleteCurrentDeck() {
+  if (builder.activeDeckId?.startsWith("default-")) {
+    showDeckStatus(["預設牌組不能刪除。"], false);
+    return;
+  }
+  builder.savedDecks = builder.savedDecks.filter((deck) => deck.id !== builder.activeDeckId);
+  saveDecks(builder.savedDecks);
+  loadBuilderRecipe(defaultDeckRecipe(builder.summonerId));
+  renderBuilder();
+}
+
+function resetCurrentDeck() {
+  loadBuilderRecipe(defaultDeckRecipe(builder.summonerId));
+  renderBuilder();
+}
+
+function updateDeckName() {
+  builder.recipe.name = els.deckNameInput.value;
+}
+
+function adjustCardCount(cardId, delta) {
+  const ids = builder.recipe.cardIds;
+  const counts = cardCounts(ids);
+  const current = counts.get(cardId) ?? 0;
+  if (delta > 0 && current >= DECK_RULES.maxCopies) return;
+  if (delta > 0 && ids.length >= DECK_RULES.size) return;
+  if (delta > 0) ids.push(cardId);
+  if (delta < 0) {
+    const index = ids.lastIndexOf(cardId);
+    if (index >= 0) ids.splice(index, 1);
+  }
+  builder.recipe.updatedAt = new Date().toISOString();
+  renderBuilder();
+}
+
+function startCustomMatch() {
+  const recipe = cloneRecipe(builder.recipe, { name: els.deckNameInput.value.trim() || builder.recipe.name });
+  const validation = validateDeckRecipe(recipe);
+  if (!validation.ok) {
+    showDeckStatus(validation.errors, false);
+    return;
+  }
+  startMatch(builder.summonerId, recipe);
+}
+
+function renderBuilder() {
+  if (!builder.recipe) return;
+  const summoner = SUMMONERS.find((item) => item.id === builder.summonerId);
+  const summary = summarizeDeck(builder.recipe);
+  els.builderTitle.textContent = `${FACTION_LABELS[summoner.faction]} 構築`;
+  els.deckNameInput.value = builder.recipe.name;
+  renderDeckSelect();
+  renderDeckSummary(summary);
+  renderCardPool();
+  renderDeckList();
+  showDeckStatus(summary.errors, summary.ok);
+  els.startCustomBtn.disabled = !summary.ok;
+  els.deleteDeckBtn.disabled = builder.activeDeckId?.startsWith("default-");
+}
+
+function renderDeckSelect() {
+  const decks = [defaultDeckRecipe(builder.summonerId), ...builder.savedDecks.filter((deck) => deck.summonerId === builder.summonerId)];
+  els.deckSelect.innerHTML = decks
+    .map((deck) => `<option value="${deck.id}" ${deck.id === builder.activeDeckId ? "selected" : ""}>${deck.name}</option>`)
+    .join("");
+}
+
+function renderDeckSummary(summary) {
+  const typeLine = Object.entries(summary.stats.types)
+    .filter(([, count]) => count > 0)
+    .map(([type, count]) => `${TYPE_LABELS[type]} ${count}`)
+    .join(" / ");
+  const curveLine = Object.entries(summary.stats.curve)
+    .filter(([, count]) => count > 0)
+    .map(([cost, count]) => `${cost}:${count}`)
+    .join(" ");
+  els.deckSummary.innerHTML = `
+    <div><strong>${summary.stats.total}/${DECK_RULES.size}</strong><span>牌數</span></div>
+    <div><strong>${summary.ok ? "合法" : "需調整"}</strong><span>狀態</span></div>
+    <div><strong>${typeLine || "無"}</strong><span>類型分布</span></div>
+    <div><strong>${curveLine || "無"}</strong><span>費用曲線</span></div>
+  `;
+}
+
+function showDeckStatus(messages, ok) {
+  if (!els.deckStatus) return;
+  els.deckStatus.className = `deck-status ${ok ? "legal" : "illegal"}`;
+  els.deckStatus.innerHTML = ok ? "牌組合法，可以開始對局。" : messages.map((message) => `<div>${message}</div>`).join("");
+}
+
+function renderCardPool() {
+  const counts = cardCounts(builder.recipe.cardIds);
+  const cards = legalCardsForSummoner(builder.summonerId).filter(matchesBuilderFilters);
+  els.cardPool.innerHTML = "";
+  for (const card of cards) {
+    const count = counts.get(card.id) ?? 0;
+    const node = document.createElement("article");
+    node.className = "card builder-card";
+    node.innerHTML = `
+      ${cardMarkup(card)}
+      <div class="builder-card-actions">
+        <button class="icon-button" type="button" title="移除一張" ${count <= 0 ? "disabled" : ""}>−</button>
+        <div class="count">${count}/${DECK_RULES.maxCopies}</div>
+        <button class="icon-button" type="button" title="加入一張" ${count >= DECK_RULES.maxCopies || builder.recipe.cardIds.length >= DECK_RULES.size ? "disabled" : ""}>＋</button>
+      </div>
+    `;
+    const buttons = node.querySelectorAll("button");
+    buttons[0].addEventListener("click", () => adjustCardCount(card.id, -1));
+    buttons[1].addEventListener("click", () => adjustCardCount(card.id, 1));
+    node.addEventListener("dblclick", () => adjustCardCount(card.id, 1));
+    els.cardPool.append(node);
+  }
+}
+
+function matchesBuilderFilters(card) {
+  const search = builder.filters.search.trim().toLowerCase();
+  const text = `${card.name} ${card.text} ${card.tags.join(" ")}`.toLowerCase();
+  if (search && !text.includes(search)) return false;
+  if (builder.filters.type !== "all" && card.type !== builder.filters.type) return false;
+  if (builder.filters.cost === "0-1" && card.cost > 1) return false;
+  if (builder.filters.cost === "5+" && card.cost < 5) return false;
+  if (!["all", "0-1", "5+"].includes(builder.filters.cost) && card.cost !== Number(builder.filters.cost)) return false;
+  return true;
+}
+
+function renderDeckList() {
+  const counts = [...cardCounts(builder.recipe.cardIds).entries()]
+    .map(([id, count]) => ({ card: BASE_CARDS.find((item) => item.id === id), count }))
+    .filter((entry) => entry.card)
+    .sort((a, b) => a.card.cost - b.card.cost || a.card.name.localeCompare(b.card.name, "zh-Hant"));
+  els.deckList.innerHTML = "";
+  for (const entry of counts) {
+    const row = document.createElement("div");
+    row.className = "deck-list-row";
+    row.innerHTML = `
+      <div>
+        <strong>${entry.card.name}</strong>
+        <div class="meta">${entry.card.cost} 費 · ${TYPE_LABELS[entry.card.type]} · ${FACTION_LABELS[entry.card.faction]}</div>
+      </div>
+      <strong>x${entry.count}</strong>
+      <button class="icon-button" type="button" title="移除一張">−</button>
+    `;
+    row.querySelector("button").addEventListener("click", () => adjustCardCount(entry.card.id, -1));
+    els.deckList.append(row);
+  }
+}
+
 function renderSummoners() {
   els.summonerGrid.innerHTML = "";
   for (const summoner of SUMMONERS) {
-    const node = document.createElement("button");
+    const node = document.createElement("article");
     node.className = "summoner-card";
     node.innerHTML = `
       <div class="faction">${FACTION_LABELS[summoner.faction]}</div>
       <h2>${summoner.name}</h2>
       <p>${summoner.style}</p>
       <p><strong>召喚師能力</strong><br>${summoner.ability}</p>
+      <div class="summoner-actions">
+        <button class="button primary" type="button">快速開局</button>
+        <button class="button secondary" type="button">構築牌組</button>
+      </div>
     `;
-    node.addEventListener("click", () => startMatch(summoner.id));
+    const [startButton, builderButton] = node.querySelectorAll("button");
+    startButton.addEventListener("click", () => startMatch(summoner.id));
+    builderButton.addEventListener("click", () => openBuilder(summoner.id));
     els.summonerGrid.append(node);
   }
 }
@@ -1413,6 +1674,35 @@ function initBrowserGame() {
   els.newGame.addEventListener("click", () => location.reload());
   els.simulate.addEventListener("click", () => runBalanceSimulation(50));
   els.resultNewGame.addEventListener("click", () => location.reload());
+  els.deckSelect.addEventListener("change", () => {
+    const selected = findDeck(els.deckSelect.value);
+    if (selected) {
+      loadBuilderRecipe(selected);
+      renderBuilder();
+    }
+  });
+  els.deckNameInput.addEventListener("input", updateDeckName);
+  els.builderSearch.addEventListener("input", () => {
+    builder.filters.search = els.builderSearch.value;
+    renderCardPool();
+  });
+  els.builderType.addEventListener("change", () => {
+    builder.filters.type = els.builderType.value;
+    renderCardPool();
+  });
+  els.builderCost.addEventListener("change", () => {
+    builder.filters.cost = els.builderCost.value;
+    renderCardPool();
+  });
+  els.saveDeckBtn.addEventListener("click", saveCurrentDeck);
+  els.copyDeckBtn.addEventListener("click", copyCurrentDeck);
+  els.deleteDeckBtn.addEventListener("click", deleteCurrentDeck);
+  els.resetDeckBtn.addEventListener("click", resetCurrentDeck);
+  els.startCustomBtn.addEventListener("click", startCustomMatch);
+  els.backToSummonersBtn.addEventListener("click", () => {
+    els.builderScreen.classList.add("hidden");
+    els.start.classList.remove("hidden");
+  });
   renderSummoners();
 
   if (new URLSearchParams(location.search).has("simulate")) {

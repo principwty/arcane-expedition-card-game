@@ -20,6 +20,78 @@
         <div id="summonerGrid" class="summoner-grid"></div>
       </section>
 
+      <section id="builderScreen" class="builder-screen hidden">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">收藏與構築</p>
+            <h2 id="builderTitle">星穹學派 預設牌組</h2>
+          </div>
+          <div class="topbar-actions">
+            <button id="backToSummonersBtn" class="button secondary">返回召喚師</button>
+            <button id="startCustomBtn" class="button primary">使用此牌組開局</button>
+          </div>
+        </header>
+
+        <section class="builder-toolbar">
+          <label>
+            <span>牌組</span>
+            <select id="deckSelect"></select>
+          </label>
+          <label>
+            <span>名稱</span>
+            <input id="deckNameInput" type="text" maxlength="32" />
+          </label>
+          <label>
+            <span>搜尋</span>
+            <input id="builderSearch" type="search" placeholder="卡名、文字、關鍵字" />
+          </label>
+          <label>
+            <span>類型</span>
+            <select id="builderType">
+              <option value="all">全部</option>
+              <option value="minion">召喚物</option>
+              <option value="spell">法術</option>
+              <option value="secret">秘儀</option>
+              <option value="artifact">遺物</option>
+            </select>
+          </label>
+          <label>
+            <span>費用</span>
+            <select id="builderCost">
+              <option value="all">全部</option>
+              <option value="0-1">0-1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5+">5+</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="builder-layout">
+          <div class="card-pool-panel">
+            <div class="builder-panel-heading">
+              <h3>卡池</h3>
+            </div>
+            <div id="cardPool" class="card-pool"></div>
+          </div>
+          <aside class="deck-panel">
+            <div class="builder-panel-heading">
+              <h3>牌組</h3>
+              <div class="deck-actions">
+                <button id="saveDeckBtn" class="button secondary">儲存</button>
+                <button id="copyDeckBtn" class="button secondary">複製</button>
+                <button id="deleteDeckBtn" class="button secondary">刪除</button>
+                <button id="resetDeckBtn" class="button secondary">重設</button>
+              </div>
+            </div>
+            <div id="deckSummary" class="deck-summary"></div>
+            <div id="deckStatus" class="deck-status"></div>
+            <div id="deckList" class="deck-list"></div>
+          </aside>
+        </section>
+      </section>
+
       <section id="gameScreen" class="game-screen hidden">
         <header class="topbar">
           <div>

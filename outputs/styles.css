@@ -223,6 +223,34 @@ h1 {
   text-align: left;
 }
 
+.power-panel {
+  display: block;
+  min-width: 150px;
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(125, 211, 252, .08);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.power-panel:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.power-panel strong {
+  display: block;
+}
+
+.power-panel span,
+.awakened {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .hero-panel strong {
   display: block;
 }
@@ -358,6 +386,23 @@ h1 {
   margin-bottom: 8px;
   color: var(--gold);
   font-size: 12px;
+}
+
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+.keywords span {
+  padding: 2px 6px;
+  border: 1px solid rgba(125, 211, 252, .44);
+  border-radius: 999px;
+  background: rgba(125, 211, 252, .1);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .card .text {

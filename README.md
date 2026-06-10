@@ -12,11 +12,14 @@ python3 -m http.server 4181 --directory outputs
 
 Then visit `http://127.0.0.1:4181/`.
 
-## V0.3 Features
+## V0.4 Features
 
 - Five factions with distinct card identities.
 - 40+ base cards and expanded evolution cards.
 - Targeted spells, attacks, secrets, artifacts, silence, board damage, healing, revive, and artifact destruction.
+- Keyword gameplay: guard, swift, ward, lifesteal, and overwhelm.
+- Summoner hero powers with once-per-turn use and awakening upgrades.
+- Deeper secrets and automatic counterplay triggers.
 - Improved AI for play, attack, and evolution decisions.
 - Balance simulation panel for 50 AI-vs-AI games.
 

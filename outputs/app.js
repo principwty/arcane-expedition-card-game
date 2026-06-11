@@ -3,10 +3,12 @@ import {
   COIN_CARD,
   DECK_RULES,
   DEFAULT_DECK_RECIPES,
+  DECK_ARCHETYPES,
   EVOLUTION_CARDS,
   EVOLUTION_THRESHOLDS,
   FACTION_LABELS,
   KEYWORD_LABELS,
+  QUEST_LINES,
   SECOND_SUPPLY_CARD,
   SUMMONERS,
   TOKENS,
@@ -17,8 +19,11 @@ import {
   cardCounts,
   cloneRecipe,
   defaultDeckRecipe,
+  archetypeRecipe,
+  archetypesForSummoner,
   legalCardsForSummoner,
   normalizeDeckRecipe,
+  questsForSummoner,
   summarizeDeck,
   validateDeckRecipe,
 } from "./src/deck-utils.js";
@@ -31,7 +36,7 @@ const builder = {
   summonerId: "star",
   activeDeckId: null,
   recipe: null,
-  filters: { search: "", type: "all", cost: "all" },
+  filters: { search: "", type: "all", cost: "all", tag: "all" },
   savedDecks: [],
 };
 
@@ -47,6 +52,9 @@ const els = hasDom
       builderSearch: document.querySelector("#builderSearch"),
       builderType: document.querySelector("#builderType"),
       builderCost: document.querySelector("#builderCost"),
+      builderTag: document.querySelector("#builderTag"),
+      questSelect: document.querySelector("#questSelect"),
+      archetypeList: document.querySelector("#archetypeList"),
       cardPool: document.querySelector("#cardPool"),
       deckList: document.querySelector("#deckList"),
       deckSummary: document.querySelector("#deckSummary"),
@@ -118,7 +126,9 @@ function createSeededRandom(seed) {
 
 function createPlayer(kind, summonerId, recipe = null) {
   const summoner = SUMMONERS.find((item) => item.id === summonerId);
-  const deckTemplates = recipe ? buildDeckTemplatesFromRecipe(recipe) : buildDeckTemplates(summoner);
+  const normalizedRecipe = recipe ? normalizeDeckRecipe(recipe) : defaultDeckRecipe(summonerId);
+  const quest = QUEST_LINES.find((item) => item.id === normalizedRecipe.questId) ?? questsForSummoner(summonerId)[0];
+  const deckTemplates = recipe ? buildDeckTemplatesFromRecipe(normalizedRecipe) : buildDeckTemplates(summoner);
   return {
     kind,
     summoner,
@@ -136,6 +146,9 @@ function createPlayer(kind, summonerId, recipe = null) {
     evolutionCount: 0,
     selectedEvolutions: [],
     pendingEvolution: null,
+    questId: quest?.id ?? "",
+    questProgress: 0,
+    questCompleted: false,
     heroPowerUsed: false,
     awakenedPowers: [],
     counters: {
@@ -309,6 +322,7 @@ function playCard(playerIndex, cardUid, target = null) {
     summonMinion(playerIndex, played, target);
   } else if (played.type === "spell") {
     player.counters.spellsThisTurn += 1;
+    triggerQuest(playerIndex, "spell", 1, played);
     resolveEffects(playerIndex, played.effects, played, target);
     triggerSpellPassives(playerIndex);
     if (player.summoner.faction === "star" && player.counters.spellsThisTurn % 3 === 0) {
@@ -317,8 +331,10 @@ function playCard(playerIndex, cardUid, target = null) {
     }
   } else if (played.type === "secret") {
     player.secrets.push(played);
+    triggerQuest(playerIndex, "secretOrSilence", 1, played);
   } else if (played.type === "artifact") {
     player.artifacts.push(played);
+    triggerQuest(playerIndex, "artifact", 1, played);
     resolveEffects(playerIndex, played.effects.filter((effect) => ["damageHero", "upgradeHeroPower"].includes(effect.type)), played, target);
     if (player.summoner.faction === "iron") buffRandomAlly(playerIndex, 1, 1);
   }
@@ -337,6 +353,10 @@ function summonMinion(playerIndex, minion, target = null) {
   }
   minion.canAttack = minion.stats.speed >= 2 || minion.tags.includes("swift");
   player.board.push(minion);
+  triggerQuest(playerIndex, "summon", 1, minion);
+  if (minion.tags.includes("dragon")) triggerQuest(playerIndex, "dragonSummon", 1, minion);
+  if (minion.tags.includes("guard") || minion.tags.includes("ward") || minion.shield) triggerQuest(playerIndex, "guardOrWardSummon", 1, minion);
+  if (minion.tags.includes("undead")) triggerQuest(playerIndex, "undeadSummon", 1, minion);
   triggerSummonSecrets(playerIndex, minion);
   player.counters.summonsThisGame += 1;
   player.counters.summonsSinceReward += 1;
@@ -415,7 +435,7 @@ function resolveEffects(playerIndex, effects, source, target = null) {
     if (effect.type === "damage") damageTarget(playerIndex, target, effect.amount, source);
     if (effect.type === "damageAllyMinion") damageFirstAllyMinion(playerIndex, effect.amount, source);
     if (effect.type === "damageAllEnemies") damageAllEnemies(playerIndex, effect.amount, source);
-    if (effect.type === "damageHero") damageHero(1 - playerIndex, effect.amount, source);
+    if (effect.type === "damageHero") damageHero(1 - playerIndex, effect.amount, playerIndex);
     if (effect.type === "dragonJudgment") damageTarget(playerIndex, target, state.players[playerIndex].evolutionCount >= 2 ? 7 : 5, source);
     if (effect.type === "draw") drawCards(playerIndex, effect.amount);
     if (effect.type === "drawThenDiscard") drawThenDiscard(playerIndex, effect.amount);
@@ -440,7 +460,10 @@ function resolveEffects(playerIndex, effects, source, target = null) {
     if (effect.type === "buffAllyOrDraw") buffAllyOrDraw(playerIndex, effect.attack, effect.health);
     if (effect.type === "sacrificeDraw") sacrificeDraw(playerIndex, target);
     if (effect.type === "revive") reviveMinions(playerIndex, effect.amount);
-    if (effect.type === "silenceMinion") silenceMinion(target);
+    if (effect.type === "silenceMinion") {
+      silenceMinion(target);
+      triggerQuest(playerIndex, "secretOrSilence", 1, source);
+    }
     if (effect.type === "destroyArtifact") destroyEnemyArtifact(playerIndex);
     if (effect.type === "upgradeHeroPower") upgradeHeroPower(playerIndex, effect.mode);
   }
@@ -466,6 +489,7 @@ function healTarget(playerIndex, target, amount) {
   const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
   if (!minion) return;
   minion.currentHealth = Math.min(minion.stats.health, minion.currentHealth + amount);
+  triggerQuest(target.ownerIndex, "heal", amount);
 }
 
 function gainShield(target) {
@@ -524,7 +548,7 @@ function damageTarget(playerIndex, target, amount, source) {
 
 function applySpellShieldThenDamageHero(sourcePlayerIndex, targetPlayerIndex, amount, source) {
   const finalAmount = consumeSpellShield(sourcePlayerIndex, targetPlayerIndex, amount, source);
-  damageHero(targetPlayerIndex, finalAmount, source);
+  damageHero(targetPlayerIndex, finalAmount, sourcePlayerIndex);
 }
 
 function applySpellShieldThenDamageMinion(sourcePlayerIndex, targetPlayerIndex, targetUid, amount, source) {
@@ -561,7 +585,7 @@ function damageEnemy(playerIndex, amount, source) {
   finalAmount = consumeSpellShield(playerIndex, 1 - playerIndex, finalAmount, source);
   const guard = opponent.board.find((minion) => minion.tags.includes("guard"));
   if (guard) damageMinion(1 - playerIndex, guard.uid, finalAmount, source);
-  else damageHero(1 - playerIndex, finalAmount, source);
+  else damageHero(1 - playerIndex, finalAmount, playerIndex);
 }
 
 function spellDamageBonus(playerIndex, source) {
@@ -592,13 +616,17 @@ function triggerSummonSecrets(playerIndex, summoned) {
   log(`${opponent.kind}的 ${snare.name} 拘束了 ${summoned.name}。`);
 }
 
-function damageHero(playerIndex, amount) {
+function damageHero(playerIndex, amount, sourcePlayerIndex = null) {
   state.players[playerIndex].hp -= amount;
+  if (typeof sourcePlayerIndex === "number" && sourcePlayerIndex !== playerIndex && amount > 0) {
+    triggerQuest(sourcePlayerIndex, "heroDamage", amount);
+  }
   checkGameOver();
 }
 
 function healHero(playerIndex, amount) {
   state.players[playerIndex].hp = Math.min(30, state.players[playerIndex].hp + amount);
+  triggerQuest(playerIndex, "heal", amount);
 }
 
 function damageMinion(ownerIndex, uidToDamage, amount, source = null) {
@@ -622,6 +650,7 @@ function killMinion(ownerIndex, minionUid, source) {
   owner.deadMinions.push(dead);
   owner.discard.push(dead);
   owner.counters.deathsThisGame += 1;
+  triggerQuest(ownerIndex, "death", 1, dead);
   log(`${dead.name} 被擊敗。`);
   const drawOnDeath = dead.effects.find((effect) => effect.type === "drawOnDeath");
   if (drawOnDeath) drawCards(ownerIndex, drawOnDeath.amount);
@@ -652,6 +681,10 @@ function summonToken(playerIndex, tokenId) {
   const token = cloneCard(TOKENS[tokenId]);
   token.canAttack = false;
   player.board.push(token);
+  triggerQuest(playerIndex, "summon", 1, token);
+  if (token.tags.includes("dragon")) triggerQuest(playerIndex, "dragonSummon", 1, token);
+  if (token.tags.includes("guard") || token.tags.includes("ward") || token.shield) triggerQuest(playerIndex, "guardOrWardSummon", 1, token);
+  if (token.tags.includes("undead")) triggerQuest(playerIndex, "undeadSummon", 1, token);
   triggerSummonPassives(playerIndex, token);
 }
 
@@ -816,10 +849,10 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
     const beforeHealth = target.currentHealth;
     damageMinion(1 - playerIndex, target.uid, totalAttack, attacker);
     damageMinion(playerIndex, attacker.uid, target.currentAttack, target);
-    if (!hadShield && attacker.tags.includes("overwhelm") && totalAttack > beforeHealth) opponent.hp -= totalAttack - beforeHealth;
+    if (!hadShield && attacker.tags.includes("overwhelm") && totalAttack > beforeHealth) damageHero(1 - playerIndex, totalAttack - beforeHealth, playerIndex);
     if (attacker.currentHealth <= 0) killMinion(playerIndex, attacker.uid, target);
   } else {
-    opponent.hp -= totalAttack;
+    damageHero(1 - playerIndex, totalAttack, playerIndex);
   }
   if (attacker.tags.includes("lifesteal")) healHero(playerIndex, totalAttack);
 
@@ -868,6 +901,30 @@ function addExpedition(playerIndex, amount, source) {
   player.expedition += amount;
   log(`${player.kind}因 ${source} 推進遠征軌 +${amount}。`);
   checkEvolution(playerIndex);
+}
+
+function triggerQuest(playerIndex, trigger, amount = 1, source = null) {
+  const player = state.players[playerIndex];
+  const quest = QUEST_LINES.find((item) => item.id === player.questId);
+  if (!quest || player.questCompleted || quest.trigger !== trigger) return;
+  player.questProgress = Math.min(quest.threshold, player.questProgress + amount);
+  if (player.questProgress < quest.threshold) return;
+  player.questCompleted = true;
+  addExpedition(playerIndex, 1, quest.name);
+  resolveQuestReward(playerIndex, quest.reward, source);
+  log(`${player.kind}完成任務：${quest.name}。`);
+}
+
+function resolveQuestReward(playerIndex, reward, source = null) {
+  if (!reward) return;
+  if (reward.type === "draw") drawCards(playerIndex, reward.amount);
+  if (reward.type === "damageHero") damageHero(1 - playerIndex, reward.amount, playerIndex);
+  if (reward.type === "summonToken") summonToken(playerIndex, reward.token);
+  if (reward.type === "buffAll") buffAll(playerIndex, reward.attack, reward.health);
+  if (reward.type === "shield") {
+    gainShieldBestAlly(playerIndex);
+    drawCards(playerIndex, reward.amount ?? 1);
+  }
 }
 
 function checkEvolution(playerIndex) {
@@ -1141,9 +1198,15 @@ export function runHeadlessSimulation(gameCount = 50, options = {}) {
   if (typeof options.seed === "number") setRandomSeed(options.seed);
   const results = [];
   for (let i = 0; i < gameCount; i++) {
-    const first = SUMMONERS[i % SUMMONERS.length].id;
-    const second = SUMMONERS[(i + 2) % SUMMONERS.length].id;
-    results.push(simulateGame(first, second, options));
+    if (options.archetypes) {
+      const firstRecipe = DECK_ARCHETYPES[i % DECK_ARCHETYPES.length];
+      const secondRecipe = DECK_ARCHETYPES[(i + 3) % DECK_ARCHETYPES.length];
+      results.push(simulateGame(firstRecipe.summonerId, secondRecipe.summonerId, { ...options, firstRecipe, secondRecipe }));
+    } else {
+      const first = SUMMONERS[i % SUMMONERS.length].id;
+      const second = SUMMONERS[(i + 2) % SUMMONERS.length].id;
+      results.push(simulateGame(first, second, options));
+    }
   }
   state = previousState;
   rng = previousRng;
@@ -1154,7 +1217,7 @@ export function runHeadlessSimulation(gameCount = 50, options = {}) {
 export function simulateGame(firstSummonerId, secondSummonerId, options = {}) {
   uid = 0;
   state = {
-    players: [createPlayer("先手", firstSummonerId), createPlayer("後手", secondSummonerId)],
+    players: [createPlayer("先手", firstSummonerId, options.firstRecipe), createPlayer("後手", secondSummonerId, options.secondRecipe)],
     active: 0,
     turn: 1,
     logs: [],
@@ -1191,6 +1254,7 @@ export function simulateGame(firstSummonerId, secondSummonerId, options = {}) {
     handCards: state.players[0].hand.length + state.players[1].hand.length,
     emptyHandTurns,
     peakBoardAttackGap,
+    quests: state.players.map((player) => ({ questId: player.questId, progress: player.questProgress, completed: player.questCompleted })),
     firstFaction: state.players[0].summoner.faction,
     secondFaction: state.players[1].summoner.faction,
     stalled: safety >= maxActions || state.turn > maxTurns,
@@ -1260,6 +1324,7 @@ function renderPlayerArea(container, player, isOpponent = false) {
   const heroTargetClass = getHeroTargetClass(ownerIndex);
   const power = currentHeroPower(ownerIndex);
   const powerDisabled = ownerIndex !== 0 || !canUseHeroPower(ownerIndex);
+  const quest = QUEST_LINES.find((item) => item.id === player.questId);
   const awakened = player.awakenedPowers.length ? `<div class="awakened">覺醒：${player.awakenedPowers.map((mode) => FACTION_LABELS[mode]).join("、")}</div>` : "";
   container.innerHTML = `
     <button class="hero-panel ${heroTargetClass}" type="button">
@@ -1276,6 +1341,7 @@ function renderPlayerArea(container, player, isOpponent = false) {
     <div class="stat-panel"><strong>${player.mana}/${player.maxMana}</strong><span>法力</span></div>
     <div class="stat-panel"><strong>${player.deck.length}</strong><span>牌庫</span></div>
     <div class="stat-panel"><strong>${player.expedition}/${nextEvolutionThreshold(player)}</strong><span>遠征 ${player.evolutionCount}/5</span></div>
+    <div class="stat-panel quest-stat"><strong>${player.questCompleted ? "完成" : `${player.questProgress}/${quest?.threshold ?? 0}`}</strong><span>${quest?.name ?? "任務"}</span></div>
     ${isOpponent ? `<div class="stat-panel"><strong>${player.hand.length}</strong><span>手牌</span></div>` : ""}
     <div class="stat-panel"><strong>${player.secrets.length}</strong><span>秘儀</span></div>
   `;
@@ -1444,10 +1510,11 @@ function saveDecks(decks) {
 function openBuilder(summonerId, deckId = null) {
   builder.summonerId = summonerId;
   builder.savedDecks = loadDecks();
-  builder.filters = { search: "", type: "all", cost: "all" };
+  builder.filters = { search: "", type: "all", cost: "all", tag: "all" };
   els.builderSearch.value = "";
   els.builderType.value = "all";
   els.builderCost.value = "all";
+  els.builderTag.value = "all";
   const candidate = deckId ? findDeck(deckId) : defaultDeckRecipe(summonerId);
   loadBuilderRecipe(candidate?.summonerId === summonerId ? candidate : defaultDeckRecipe(summonerId));
   els.start.classList.add("hidden");
@@ -1520,6 +1587,18 @@ function updateDeckName() {
   builder.recipe.name = els.deckNameInput.value;
 }
 
+function updateQuestSelection() {
+  builder.recipe.questId = els.questSelect.value;
+  renderBuilder();
+}
+
+function loadArchetype(archetypeId) {
+  const recipe = archetypeRecipe(archetypeId);
+  if (!recipe) return;
+  loadBuilderRecipe(recipe);
+  renderBuilder();
+}
+
 function adjustCardCount(cardId, delta) {
   const ids = builder.recipe.cardIds;
   const counts = cardCounts(ids);
@@ -1551,6 +1630,9 @@ function renderBuilder() {
   const summary = summarizeDeck(builder.recipe);
   els.builderTitle.textContent = `${FACTION_LABELS[summoner.faction]} 構築`;
   els.deckNameInput.value = builder.recipe.name;
+  renderQuestSelect();
+  renderBuilderTags();
+  renderArchetypes();
   renderDeckSelect();
   renderDeckSummary(summary);
   renderCardPool();
@@ -1567,7 +1649,33 @@ function renderDeckSelect() {
     .join("");
 }
 
+function renderQuestSelect() {
+  const quests = questsForSummoner(builder.summonerId);
+  els.questSelect.innerHTML = quests
+    .map((quest) => `<option value="${quest.id}" ${quest.id === builder.recipe.questId ? "selected" : ""}>${quest.name} · ${quest.conditionText}</option>`)
+    .join("");
+}
+
+function renderBuilderTags() {
+  const tags = [...new Set(questsForSummoner(builder.summonerId).flatMap((quest) => quest.tags))];
+  els.builderTag.innerHTML = [`<option value="all">全部</option>`, ...tags.map((tag) => `<option value="${tag}" ${tag === builder.filters.tag ? "selected" : ""}>${tag}</option>`)].join("");
+}
+
+function renderArchetypes() {
+  els.archetypeList.innerHTML = "";
+  for (const archetype of archetypesForSummoner(builder.summonerId)) {
+    const quest = QUEST_LINES.find((item) => item.id === archetype.questId);
+    const button = document.createElement("button");
+    button.className = "archetype-button";
+    button.type = "button";
+    button.innerHTML = `<strong>${archetype.name}</strong><span>${quest?.name ?? ""}</span><span>${archetype.description}</span>`;
+    button.addEventListener("click", () => loadArchetype(archetype.id));
+    els.archetypeList.append(button);
+  }
+}
+
 function renderDeckSummary(summary) {
+  const quest = QUEST_LINES.find((item) => item.id === summary.recipe.questId);
   const typeLine = Object.entries(summary.stats.types)
     .filter(([, count]) => count > 0)
     .map(([type, count]) => `${TYPE_LABELS[type]} ${count}`)
@@ -1579,6 +1687,7 @@ function renderDeckSummary(summary) {
   els.deckSummary.innerHTML = `
     <div><strong>${summary.stats.total}/${DECK_RULES.size}</strong><span>牌數</span></div>
     <div><strong>${summary.ok ? "合法" : "需調整"}</strong><span>狀態</span></div>
+    <div><strong>${quest?.name ?? "未選擇"}</strong><span>任務路線</span></div>
     <div><strong>${typeLine || "無"}</strong><span>類型分布</span></div>
     <div><strong>${curveLine || "無"}</strong><span>費用曲線</span></div>
   `;
@@ -1622,6 +1731,7 @@ function matchesBuilderFilters(card) {
   if (builder.filters.cost === "0-1" && card.cost > 1) return false;
   if (builder.filters.cost === "5+" && card.cost < 5) return false;
   if (!["all", "0-1", "5+"].includes(builder.filters.cost) && card.cost !== Number(builder.filters.cost)) return false;
+  if (builder.filters.tag !== "all" && !card.tags.includes(builder.filters.tag)) return false;
   return true;
 }
 
@@ -1650,12 +1760,14 @@ function renderDeckList() {
 function renderSummoners() {
   els.summonerGrid.innerHTML = "";
   for (const summoner of SUMMONERS) {
+    const archetypes = archetypesForSummoner(summoner.id);
     const node = document.createElement("article");
     node.className = "summoner-card";
     node.innerHTML = `
       <div class="faction">${FACTION_LABELS[summoner.faction]}</div>
       <h2>${summoner.name}</h2>
       <p>${summoner.style}</p>
+      <p><strong>打法</strong><br>${archetypes.map((item) => item.name.replace("模板", "")).join(" / ")}</p>
       <p><strong>召喚師能力</strong><br>${summoner.ability}</p>
       <div class="summoner-actions">
         <button class="button primary" type="button">快速開局</button>
@@ -1682,6 +1794,7 @@ function initBrowserGame() {
     }
   });
   els.deckNameInput.addEventListener("input", updateDeckName);
+  els.questSelect.addEventListener("change", updateQuestSelection);
   els.builderSearch.addEventListener("input", () => {
     builder.filters.search = els.builderSearch.value;
     renderCardPool();
@@ -1692,6 +1805,10 @@ function initBrowserGame() {
   });
   els.builderCost.addEventListener("change", () => {
     builder.filters.cost = els.builderCost.value;
+    renderCardPool();
+  });
+  els.builderTag.addEventListener("change", () => {
+    builder.filters.tag = els.builderTag.value;
     renderCardPool();
   });
   els.saveDeckBtn.addEventListener("click", saveCurrentDeck);

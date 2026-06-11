@@ -1,4 +1,4 @@
-import { BASE_CARDS, DEFAULT_DECK_RECIPES, EVOLUTION_CARDS, FACTION_LABELS, KEYWORD_LABELS, TYPE_LABELS } from "../outputs/src/data.js";
+import { BASE_CARDS, DECK_ARCHETYPES, DEFAULT_DECK_RECIPES, EVOLUTION_CARDS, FACTION_LABELS, KEYWORD_LABELS, QUEST_LINES, TYPE_LABELS } from "../outputs/src/data.js";
 import { deckStats, validateDeckRecipe } from "../outputs/src/deck-utils.js";
 import { validateCards } from "./validate-cards.mjs";
 
@@ -41,6 +41,20 @@ for (const recipe of Object.values(DEFAULT_DECK_RECIPES)) {
     .map(([type, count]) => `${TYPE_LABELS[type]}:${count}`)
     .join(" ");
   console.log(`${recipe.name} - ${validation.ok ? "legal" : "illegal"} - curve ${curve} - ${types}`);
+}
+
+console.log("\n## Quest Lines");
+for (const quest of QUEST_LINES) {
+  const support = BASE_CARDS.filter((card) => card.faction === quest.summonerId || card.faction === "neutral").filter((card) => card.tags.some((tag) => quest.tags.includes(tag))).length;
+  console.log(`${FACTION_LABELS[quest.summonerId]} / ${quest.name} - ${quest.conditionText} - support ${support}`);
+}
+
+console.log("\n## Archetype Templates");
+for (const archetype of DECK_ARCHETYPES) {
+  const validation = validateDeckRecipe(archetype);
+  const stats = deckStats(archetype);
+  const curve = Object.entries(stats.curve).map(([cost, count]) => `${cost}:${count}`).join(" ");
+  console.log(`${archetype.name} - ${validation.ok ? "legal" : "illegal"} - ${QUEST_LINES.find((quest) => quest.id === archetype.questId)?.name ?? archetype.questId} - curve ${curve}`);
 }
 
 if (!validation.ok) {

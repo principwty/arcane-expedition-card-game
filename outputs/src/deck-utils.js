@@ -1,13 +1,16 @@
-import { BASE_CARDS, DECK_RULES, DEFAULT_DECK_RECIPES, FACTION_LABELS, SUMMONERS, TYPE_LABELS } from "./data.js";
+import { BASE_CARDS, DECK_ARCHETYPES, DECK_RULES, DEFAULT_DECK_RECIPES, FACTION_LABELS, QUEST_LINES, SUMMONERS, TYPE_LABELS } from "./data.js";
 
 const baseCardById = new Map(BASE_CARDS.map((card) => [card.id, card]));
 const summonerById = new Map(SUMMONERS.map((summoner) => [summoner.id, summoner]));
+const questById = new Map(QUEST_LINES.map((quest) => [quest.id, quest]));
 
 export function normalizeDeckRecipe(recipe) {
+  const summonerId = recipe?.summonerId || SUMMONERS[0].id;
   return {
     id: recipe?.id || `deck-${Date.now()}`,
     name: recipe?.name || "未命名牌組",
-    summonerId: recipe?.summonerId || SUMMONERS[0].id,
+    summonerId,
+    questId: recipe?.questId || defaultQuestId(summonerId),
     cardIds: Array.isArray(recipe?.cardIds) ? recipe.cardIds.filter((id) => typeof id === "string") : [],
     updatedAt: recipe?.updatedAt || new Date().toISOString(),
   };
@@ -23,6 +26,7 @@ export function cloneRecipe(recipe, overrides = {}) {
     id: recipe.id,
     name: recipe.name,
     summonerId: recipe.summonerId,
+    questId: recipe.questId || defaultQuestId(recipe.summonerId),
     cardIds: [...recipe.cardIds],
     updatedAt: recipe.updatedAt,
     ...overrides,
@@ -33,9 +37,12 @@ export function validateDeckRecipe(recipe) {
   const normalized = normalizeDeckRecipe(recipe);
   const errors = [];
   const summoner = summonerById.get(normalized.summonerId);
+  const quest = questById.get(normalized.questId);
   const counts = cardCounts(normalized.cardIds);
 
   if (!summoner) errors.push("召喚師不存在。");
+  if (!quest) errors.push("任務路線不存在。");
+  if (quest && quest.summonerId !== normalized.summonerId) errors.push(`${quest.name} 不屬於此召喚師。`);
   if (normalized.cardIds.length !== DECK_RULES.size) errors.push(`牌組必須剛好 ${DECK_RULES.size} 張，目前 ${normalized.cardIds.length} 張。`);
 
   for (const [cardId, count] of counts) {
@@ -72,6 +79,27 @@ export function legalCardsForSummoner(summonerId) {
   return BASE_CARDS.filter((card) => card.faction === summoner.faction || card.faction === "neutral");
 }
 
+export function questsForSummoner(summonerId) {
+  return QUEST_LINES.filter((quest) => quest.summonerId === summonerId);
+}
+
+export function archetypesForSummoner(summonerId) {
+  return DECK_ARCHETYPES.filter((archetype) => archetype.summonerId === summonerId);
+}
+
+export function archetypeRecipe(archetypeId) {
+  const archetype = DECK_ARCHETYPES.find((item) => item.id === archetypeId);
+  if (!archetype) return null;
+  return normalizeDeckRecipe({
+    id: `deck-${Date.now()}`,
+    name: archetype.name,
+    summonerId: archetype.summonerId,
+    questId: archetype.questId,
+    cardIds: archetype.cardIds,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export function deckStats(recipe) {
   const cards = recipe.cardIds.map((cardId) => baseCardById.get(cardId)).filter(Boolean);
   const curve = Object.fromEntries(Array.from({ length: 9 }, (_, cost) => [cost, 0]));
@@ -88,4 +116,8 @@ export function summarizeDeck(recipe) {
   const validation = validateDeckRecipe(recipe);
   const stats = deckStats(validation.recipe);
   return { ...validation, stats };
+}
+
+function defaultQuestId(summonerId) {
+  return QUEST_LINES.find((quest) => quest.summonerId === summonerId)?.id ?? "";
 }

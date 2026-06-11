@@ -41,6 +41,7 @@ const ANIMATION_SETTINGS = {
 let animationSpeed = "normal";
 let visualQueue = [];
 let visualBusy = false;
+let visualProcessTimer = null;
 const builder = {
   summonerId: "star",
   activeDeckId: null,
@@ -206,6 +207,10 @@ function startMatch(playerSummonerId, playerRecipe = null) {
   };
   visualQueue = [];
   visualBusy = false;
+  if (visualProcessTimer) {
+    window.clearTimeout(visualProcessTimer);
+    visualProcessTimer = null;
+  }
   if (els.visualOverlay) els.visualOverlay.innerHTML = "";
   drawCards(0, 4);
   drawCards(1, 4);
@@ -1231,12 +1236,20 @@ function emitVisualEvent(type, payload = {}) {
   state.visualQueue?.push(event);
   visualQueue.push(event);
   state.visualQueue = visualQueue;
-  processVisualQueue();
+  scheduleVisualQueue();
+}
+
+function scheduleVisualQueue() {
+  if (visualBusy || visualProcessTimer) return;
+  visualProcessTimer = window.setTimeout(() => {
+    visualProcessTimer = null;
+    processVisualQueue();
+  }, 0);
 }
 
 function processVisualQueue() {
   if (visualBusy || !els.visualOverlay) return;
-  const event = visualQueue.shift();
+  const event = takeNextVisualEvent();
   if (state) state.visualQueue = visualQueue;
   if (!event) return;
   visualBusy = true;
@@ -1253,8 +1266,62 @@ function processVisualQueue() {
     node.remove();
     visualBusy = false;
     if (!visualQueue.length) renderActionHint();
-    processVisualQueue();
+    scheduleVisualQueue();
   }, currentAnimationDuration());
+}
+
+function takeNextVisualEvent() {
+  if (!visualQueue.length) return null;
+  const burst = visualQueue.splice(0, visualQueue.length);
+  return summarizeVisualBurst(burst);
+}
+
+function summarizeVisualBurst(events) {
+  const filtered = dedupeVisualEvents(events);
+  const priority = {
+    secretTrigger: 100,
+    evolution: 90,
+    attack: 80,
+    shieldBreak: 76,
+    damage: 74,
+    heal: 68,
+    shield: 62,
+    summon: 54,
+    playCard: 40,
+  };
+  const grouped = filtered.reduce((map, event) => {
+    map.set(event.type, [...(map.get(event.type) ?? []), event]);
+    return map;
+  }, new Map());
+  for (const type of ["damage", "heal", "summon"]) {
+    const items = grouped.get(type) ?? [];
+    if (items.length > 1) {
+      return {
+        type,
+        payload: {
+          label: type === "damage" ? `-${sumEventNumbers(items)}` : type === "heal" ? `+${sumEventNumbers(items)}` : `${items.length} 次召喚`,
+          detail: type === "summon" ? "連續登場" : `${items.length} 個目標`,
+          tone: items[0].payload.tone,
+        },
+        id: items[0].id,
+      };
+    }
+  }
+  return filtered.sort((a, b) => (priority[b.type] ?? 0) - (priority[a.type] ?? 0))[0] ?? events[0];
+}
+
+function dedupeVisualEvents(events) {
+  const seen = new Set();
+  return events.filter((event) => {
+    const key = `${event.type}|${event.payload.label ?? ""}|${event.payload.detail ?? ""}|${event.payload.tone ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function sumEventNumbers(events) {
+  return events.reduce((sum, event) => sum + Math.abs(Number(String(event.payload.label ?? "").replace(/[^0-9.-]/g, "")) || 0), 0);
 }
 
 function buildVisualNode(event) {

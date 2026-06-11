@@ -35,13 +35,27 @@ let uid = 0;
 let rng = Math.random;
 const hasDom = typeof document !== "undefined";
 const ANIMATION_SETTINGS = {
-  storageKey: "arcane-expedition-animation-speed-v1",
-  durations: { normal: 760, fast: 260, off: 0 },
+  speedStorageKey: "arcane-expedition-animation-speed-v1",
+  detailStorageKey: "arcane-expedition-animation-detail-v1",
+  durations: { normal: 320, fast: 130, off: 0 },
+  maxSteps: { compact: 3, standard: 5, full: 6 },
 };
 let animationSpeed = "normal";
+let animationDetail = "standard";
 let visualQueue = [];
 let visualBusy = false;
 let visualProcessTimer = null;
+let currentTransaction = null;
+let transactionUid = 0;
+const SUPPORTED_KEYWORDS = new Set(["guard", "swift", "ward", "lifesteal", "overwhelm"]);
+const SUPPORTED_STATUSES = new Set(["silenced", "stunned", "cannotAttack", "deathrattleDisabled", "temporaryBuff"]);
+const PHASE_LABELS = {
+  startTurn: "回合開始",
+  main: "主要階段",
+  combat: "戰鬥階段",
+  endTurn: "回合結束",
+  cleanup: "清理階段",
+};
 const builder = {
   summonerId: "star",
   activeDeckId: null,
@@ -89,6 +103,7 @@ const els = hasDom
       actionHint: document.querySelector("#actionHint"),
       visualOverlay: document.querySelector("#visualOverlay"),
       animationSpeed: document.querySelector("#animationSpeed"),
+      animationDetail: document.querySelector("#animationDetail"),
       endTurn: document.querySelector("#endTurnBtn"),
       newGame: document.querySelector("#newGameBtn"),
       simulate: document.querySelector("#simulateBtn"),
@@ -102,12 +117,18 @@ const els = hasDom
   : {};
 
 function cloneCard(template) {
+  const keywords = (template.tags ?? []).filter((tag) => SUPPORTED_KEYWORDS.has(tag));
   return {
     ...template,
+    tags: [...(template.tags ?? [])],
+    effects: [...(template.effects ?? [])],
+    keywords,
+    statuses: [],
+    temporaryBuffs: [],
     uid: `c${uid++}`,
     currentHealth: template.stats?.health ?? null,
     currentAttack: template.stats?.attack ?? null,
-    shield: template.tags?.includes("ward") ?? false,
+    shield: keywords.includes("ward"),
     canAttack: false,
     attackedThisTurn: false,
   };
@@ -145,7 +166,7 @@ function createPlayer(kind, summonerId, recipe = null) {
   return {
     kind,
     summoner,
-    hp: 28,
+    hp: 30,
     maxMana: 0,
     mana: 0,
     deck: shuffle(deckTemplates.map(cloneCard)),
@@ -159,6 +180,9 @@ function createPlayer(kind, summonerId, recipe = null) {
     evolutionCount: 0,
     selectedEvolutions: [],
     pendingEvolution: null,
+    phase: "main",
+    turnFlags: {},
+    triggerHistory: [],
     questId: quest?.id ?? "",
     questProgress: 0,
     questCompleted: false,
@@ -203,6 +227,8 @@ function startMatch(playerSummonerId, playerRecipe = null) {
     waitingForEvolution: false,
     pendingAction: null,
     visualQueue: [],
+    transactions: [],
+    phase: "main",
     simulating: false,
   };
   visualQueue = [];
@@ -227,6 +253,9 @@ function startMatch(playerSummonerId, playerRecipe = null) {
 function startTurn(playerIndex) {
   const player = state.players[playerIndex];
   state.active = playerIndex;
+  state.phase = "startTurn";
+  player.phase = "startTurn";
+  player.turnFlags = {};
   player.maxMana = Math.min(10, player.maxMana + 1);
   player.mana = player.maxMana;
   player.counters.spellsThisTurn = 0;
@@ -238,10 +267,18 @@ function startTurn(playerIndex) {
   player.counters.beastHealUsed = false;
   player.heroPowerUsed = false;
   player.board.forEach((minion) => {
-    minion.canAttack = true;
+    const wasStunned = hasStatus(minion, "stunned") || hasStatus(minion, "cannotAttack");
+    minion.canAttack = !wasStunned;
+    if (wasStunned) {
+      removeStatus(minion, "stunned");
+      removeStatus(minion, "cannotAttack");
+    }
     minion.attackedThisTurn = false;
   });
   drawCards(playerIndex, 1);
+  triggerTurnStartPassives(playerIndex);
+  state.phase = "main";
+  player.phase = "main";
   if (playerIndex === 1 && !state.simulating) {
     render();
     setTimeout(aiTurn, 700);
@@ -250,6 +287,10 @@ function startTurn(playerIndex) {
 
 function endTurn() {
   if (state.gameOver || state.waitingForEvolution || state.pendingAction || state.active !== 0) return;
+  state.phase = "endTurn";
+  state.players[state.active].phase = "endTurn";
+  cleanupTemporaryBuffs(state.active);
+  state.phase = "cleanup";
   const next = state.active === 0 ? 1 : 0;
   if (next === 0) state.turn += 1;
   startTurn(next);
@@ -284,18 +325,26 @@ function useHeroPower(playerIndex, target = null) {
     return;
   }
   if (requiredTarget && !isLegalTarget(playerIndex, requiredTarget, target)) return;
-  const player = state.players[playerIndex];
-  player.mana -= power.cost;
-  player.heroPowerUsed = true;
-  state.pendingAction = null;
-  log(`${player.kind}使用召喚師技能：${power.name}。`);
-  resolveEffects(playerIndex, power.effects, { ...power, type: "heroPower", tags: [] }, target);
-  checkGameOver();
+  withTransaction("heroPower", playerIndex, power, (transaction) => {
+    const player = state.players[playerIndex];
+    player.mana -= power.cost;
+    player.heroPowerUsed = true;
+    state.pendingAction = null;
+    recordEvent(transaction, "costPaid", { mana: power.cost, source: power.name });
+    recordEvent(transaction, "heroPowerUsed", { label: power.name, detail: player.kind, tone: player.summoner.faction, target });
+    log(`${player.kind}使用召喚師技能：${power.name}。`);
+    resolveEffects(playerIndex, power.effects, { ...power, type: "heroPower", tags: [] }, target);
+    checkGameOver();
+  });
   render();
 }
 
 function aiEndTurn() {
   if (state.gameOver) return;
+  state.phase = "endTurn";
+  state.players[state.active].phase = "endTurn";
+  cleanupTemporaryBuffs(state.active);
+  state.phase = "cleanup";
   state.turn += 1;
   startTurn(0);
   log("輪到你了。");
@@ -334,37 +383,40 @@ function playCard(playerIndex, cardUid, target = null) {
     return;
   }
   if (requiredTarget && !isLegalTarget(playerIndex, requiredTarget, target)) return;
-  player.hand.splice(index, 1);
-  player.mana -= played.cost;
-  state.pendingAction = null;
-  log(`${player.kind}使用了 ${played.name}。`);
-  emitVisualEvent("playCard", { label: played.name, detail: TYPE_LABELS[played.type], tone: played.faction });
+  withTransaction("playCard", playerIndex, played, (transaction) => {
+    player.hand.splice(index, 1);
+    player.mana -= played.cost;
+    state.pendingAction = null;
+    recordEvent(transaction, "costPaid", { mana: played.cost, source: played.name });
+    recordEvent(transaction, "cardPlayed", { label: played.name, detail: TYPE_LABELS[played.type], tone: played.faction, cardId: played.id, target });
+    log(`${player.kind}使用了 ${played.name}。`);
 
-  if (played.type === "minion") {
-    summonMinion(playerIndex, played, target);
-  } else if (played.type === "spell") {
-    player.counters.spellsThisTurn += 1;
-    triggerQuest(playerIndex, "spell", 1, played);
-    resolveEffects(playerIndex, played.effects, played, target);
-    triggerSpellPassives(playerIndex);
-    if (player.summoner.faction === "star" && player.counters.spellsThisTurn % 3 === 0) {
-      drawCards(playerIndex, 1);
-      addExpedition(playerIndex, 1, "星穹學派能力");
+    if (played.type === "minion") {
+      summonMinion(playerIndex, played, target);
+    } else if (played.type === "spell") {
+      player.counters.spellsThisTurn += 1;
+      triggerQuest(playerIndex, "spell", 1, played);
+      resolveEffects(playerIndex, played.effects, played, target);
+      triggerSpellPassives(playerIndex);
+      if (player.summoner.faction === "star" && player.counters.spellsThisTurn % 3 === 0) {
+        drawCards(playerIndex, 1);
+        addExpedition(playerIndex, 1, "星穹學派能力");
+      }
+    } else if (played.type === "secret") {
+      player.secrets.push(played);
+      triggerQuest(playerIndex, "secretOrSilence", 1, played);
+      emitVisualEvent("secretTrigger", { label: "秘儀設置", detail: played.name, tone: "secret" });
+    } else if (played.type === "artifact") {
+      player.artifacts.push(played);
+      triggerQuest(playerIndex, "artifact", 1, played);
+      resolveEffects(playerIndex, played.effects.filter((effect) => ["damageHero", "upgradeHeroPower"].includes(effect.type)), played, target);
+      if (player.summoner.faction === "iron") buffRandomAlly(playerIndex, 1, 1);
     }
-  } else if (played.type === "secret") {
-    player.secrets.push(played);
-    triggerQuest(playerIndex, "secretOrSilence", 1, played);
-    emitVisualEvent("secretTrigger", { label: "秘儀設置", detail: played.name, tone: "secret" });
-  } else if (played.type === "artifact") {
-    player.artifacts.push(played);
-    triggerQuest(playerIndex, "artifact", 1, played);
-    resolveEffects(playerIndex, played.effects.filter((effect) => ["damageHero", "upgradeHeroPower"].includes(effect.type)), played, target);
-    if (player.summoner.faction === "iron") buffRandomAlly(playerIndex, 1, 1);
-  }
-  player.discard.push(played.type === "secret" || played.type === "artifact" ? null : played);
-  cleanupDiscard(player);
-  checkEvolution(playerIndex);
-  checkGameOver();
+    player.discard.push(played.type === "secret" || played.type === "artifact" ? null : played);
+    cleanupDiscard(player);
+    checkEvolution(playerIndex);
+    checkGameOver();
+  });
   render();
 }
 
@@ -374,12 +426,12 @@ function summonMinion(playerIndex, minion, target = null) {
     minion.currentAttack += 1;
     minion.currentHealth += 1;
   }
-  minion.canAttack = minion.stats.speed >= 2 || minion.tags.includes("swift");
+  minion.canAttack = minion.stats.speed >= 2 || hasKeyword(minion, "swift");
   player.board.push(minion);
-  emitVisualEvent("summon", { label: minion.name, detail: minion.tags.includes("guard") ? "守護登場" : "召喚登場", tone: minion.faction });
+  emitVisualEvent("summon", { label: minion.name, detail: hasKeyword(minion, "guard") ? "守護登場" : "召喚登場", tone: minion.faction });
   triggerQuest(playerIndex, "summon", 1, minion);
   if (minion.tags.includes("dragon")) triggerQuest(playerIndex, "dragonSummon", 1, minion);
-  if (minion.tags.includes("guard") || minion.tags.includes("ward") || minion.shield) triggerQuest(playerIndex, "guardOrWardSummon", 1, minion);
+  if (hasKeyword(minion, "guard") || hasKeyword(minion, "ward") || minion.shield) triggerQuest(playerIndex, "guardOrWardSummon", 1, minion);
   if (minion.tags.includes("undead")) triggerQuest(playerIndex, "undeadSummon", 1, minion);
   triggerSummonSecrets(playerIndex, minion);
   player.counters.summonsThisGame += 1;
@@ -454,6 +506,57 @@ function selectTarget(target) {
   }
 }
 
+function keywordsOf(item) {
+  if (!item || hasStatus(item, "silenced")) return [];
+  const tags = item.tags ?? [];
+  const keywords = item.keywords ?? [];
+  return [...new Set([...keywords, ...tags.filter((tag) => SUPPORTED_KEYWORDS.has(tag))])];
+}
+
+function hasKeyword(item, keyword) {
+  return keywordsOf(item).includes(keyword);
+}
+
+function hasStatus(item, status) {
+  return Boolean(item?.statuses?.includes(status));
+}
+
+function addStatus(item, status) {
+  if (!item || !SUPPORTED_STATUSES.has(status)) return;
+  item.statuses ??= [];
+  if (!item.statuses.includes(status)) item.statuses.push(status);
+  if (status === "stunned" || status === "cannotAttack") item.canAttack = false;
+  recordEvent(currentTransaction, "statusApplied", { label: statusLabel(status), detail: item.name, tone: "status", status });
+}
+
+function removeStatus(item, status) {
+  if (!item?.statuses) return;
+  item.statuses = item.statuses.filter((entry) => entry !== status);
+}
+
+function statusLabel(status) {
+  return {
+    silenced: "沉默",
+    stunned: "暈眩",
+    cannotAttack: "不能攻擊",
+    deathrattleDisabled: "死亡效果封鎖",
+    temporaryBuff: "暫時增益",
+  }[status] ?? status;
+}
+
+function cleanupTemporaryBuffs(playerIndex) {
+  const player = state.players[playerIndex];
+  for (const minion of player.board) {
+    for (const buff of minion.temporaryBuffs ?? []) {
+      minion.currentAttack -= buff.attack ?? 0;
+      minion.currentHealth -= buff.health ?? 0;
+    }
+    minion.temporaryBuffs = [];
+    removeStatus(minion, "temporaryBuff");
+    if (minion.currentHealth <= 0) killMinion(playerIndex, minion.uid, { name: "臨時增益消退", effects: [] });
+  }
+}
+
 function resolveEffects(playerIndex, effects, source, target = null) {
   for (const effect of effects) {
     if (effect.type === "damage") damageTarget(playerIndex, target, effect.amount, source);
@@ -473,6 +576,9 @@ function resolveEffects(playerIndex, effects, source, target = null) {
     if (effect.type === "gainMana") state.players[playerIndex].mana += effect.amount;
     if (effect.type === "gainShield") gainShield(target);
     if (effect.type === "gainShieldBestAlly") gainShieldBestAlly(playerIndex);
+    if (effect.type === "stunTarget") stunTarget(target);
+    if (effect.type === "disableDeathrattle") disableDeathrattle(target);
+    if (effect.type === "temporaryBuff") temporaryBuffTarget(playerIndex, target, effect.attack, effect.health);
     if (effect.type === "expedition") addExpedition(playerIndex, effect.amount, source.name);
     if (effect.type === "expeditionIfTargetDies" && target?.type === "minion" && !state.players[target.ownerIndex].board.some((item) => item.uid === target.uid)) addExpedition(playerIndex, effect.amount, source.name);
     if (effect.type === "summonToken") summonToken(playerIndex, effect.token);
@@ -489,6 +595,9 @@ function resolveEffects(playerIndex, effects, source, target = null) {
       triggerQuest(playerIndex, "secretOrSilence", 1, source);
     }
     if (effect.type === "destroyArtifact") destroyEnemyArtifact(playerIndex);
+    if (effect.type === "startTurnHeal") {
+      // Passive artifact effect; resolved from triggerTurnStartPassives.
+    }
     if (effect.type === "upgradeHeroPower") upgradeHeroPower(playerIndex, effect.mode);
   }
 }
@@ -513,7 +622,7 @@ function healTarget(playerIndex, target, amount) {
   const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
   if (!minion) return;
   minion.currentHealth = Math.min(minion.stats.health, minion.currentHealth + amount);
-  emitVisualEvent("heal", { label: `+${amount}`, detail: minion.name, tone: "heal" });
+  emitVisualEvent("heal", { label: `+${amount}`, amount, detail: minion.name, tone: "heal", target });
   triggerQuest(target.ownerIndex, "heal", amount);
 }
 
@@ -522,7 +631,7 @@ function gainShield(target) {
   const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
   if (minion) {
     minion.shield = true;
-    emitVisualEvent("shield", { label: "護盾", detail: minion.name, tone: "shield" });
+    emitVisualEvent("shield", { label: "護盾", detail: minion.name, tone: "shield", target });
   }
 }
 
@@ -530,8 +639,36 @@ function gainShieldBestAlly(playerIndex) {
   const minion = [...state.players[playerIndex].board].sort((a, b) => b.currentAttack + b.currentHealth - (a.currentAttack + a.currentHealth))[0];
   if (minion) {
     minion.shield = true;
-    emitVisualEvent("shield", { label: "護盾", detail: minion.name, tone: "shield" });
+    emitVisualEvent("shield", { label: "護盾", detail: minion.name, tone: "shield", target: { type: "minion", ownerIndex: playerIndex, uid: minion.uid } });
   }
+}
+
+function stunTarget(target) {
+  if (!target || target.type !== "minion") return;
+  const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
+  if (!minion) return;
+  addStatus(minion, "stunned");
+  log(`${minion.name} 被暈眩。`);
+}
+
+function disableDeathrattle(target) {
+  if (!target || target.type !== "minion") return;
+  const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
+  if (!minion) return;
+  addStatus(minion, "deathrattleDisabled");
+  log(`${minion.name} 的死亡效果被封鎖。`);
+}
+
+function temporaryBuffTarget(playerIndex, target, attack = 0, health = 0) {
+  if (!target || target.ownerIndex !== playerIndex || target.type !== "minion") return;
+  const minion = state.players[playerIndex].board.find((item) => item.uid === target.uid);
+  if (!minion) return;
+  minion.currentAttack += attack;
+  minion.currentHealth += health;
+  minion.temporaryBuffs ??= [];
+  minion.temporaryBuffs.push({ attack, health });
+  addStatus(minion, "temporaryBuff");
+  log(`${minion.name} 獲得暫時 +${attack}/+${health}。`);
 }
 
 function drawThenDiscard(playerIndex, amount) {
@@ -548,8 +685,11 @@ function silenceMinion(target) {
   if (!target || target.type !== "minion") return;
   const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
   if (!minion) return;
+  addStatus(minion, "silenced");
+  addStatus(minion, "deathrattleDisabled");
   minion.effects = [];
   minion.tags = minion.tags.filter((tag) => tag !== "guard");
+  minion.keywords = [];
   minion.text = "已被沉默。";
   log(`${minion.name} 被沉默。`);
 }
@@ -616,7 +756,7 @@ function damageEnemy(playerIndex, amount, source) {
   const opponent = state.players[1 - playerIndex];
   let finalAmount = amount + spellDamageBonus(playerIndex, source);
   finalAmount = consumeSpellShield(playerIndex, 1 - playerIndex, finalAmount, source);
-  const guard = opponent.board.find((minion) => minion.tags.includes("guard"));
+  const guard = opponent.board.find((minion) => hasKeyword(minion, "guard"));
   if (guard) damageMinion(1 - playerIndex, guard.uid, finalAmount, source);
   else damageHero(1 - playerIndex, finalAmount, playerIndex);
 }
@@ -652,7 +792,7 @@ function triggerSummonSecrets(playerIndex, summoned) {
 
 function damageHero(playerIndex, amount, sourcePlayerIndex = null) {
   state.players[playerIndex].hp -= amount;
-  if (amount > 0) emitVisualEvent("damage", { label: `-${amount}`, detail: playerIndex === 0 ? "我方英雄" : "敵方英雄", tone: "damage" });
+  if (amount > 0) emitVisualEvent("damage", { label: `-${amount}`, amount, detail: playerIndex === 0 ? "我方英雄" : "敵方英雄", tone: "damage", target: { type: "hero", ownerIndex: playerIndex } });
   if (typeof sourcePlayerIndex === "number" && sourcePlayerIndex !== playerIndex && amount > 0) {
     triggerQuest(sourcePlayerIndex, "heroDamage", amount);
   }
@@ -661,7 +801,7 @@ function damageHero(playerIndex, amount, sourcePlayerIndex = null) {
 
 function healHero(playerIndex, amount) {
   state.players[playerIndex].hp = Math.min(30, state.players[playerIndex].hp + amount);
-  emitVisualEvent("heal", { label: `+${amount}`, detail: playerIndex === 0 ? "我方英雄" : "敵方英雄", tone: "heal" });
+  emitVisualEvent("heal", { label: `+${amount}`, amount, detail: playerIndex === 0 ? "我方英雄" : "敵方英雄", tone: "heal", target: { type: "hero", ownerIndex: playerIndex } });
   triggerQuest(playerIndex, "heal", amount);
 }
 
@@ -671,12 +811,12 @@ function damageMinion(ownerIndex, uidToDamage, amount, source = null) {
   if (!minion) return;
   if (minion.shield && amount > 0) {
     minion.shield = false;
-    emitVisualEvent("shieldBreak", { label: "護盾抵銷", detail: minion.name, tone: "shield" });
+    emitVisualEvent("shieldBreak", { label: "護盾抵銷", detail: minion.name, tone: "shield", target: { type: "minion", ownerIndex, uid: minion.uid } });
     log(`${minion.name} 的護盾抵銷了傷害。`);
     return;
   }
   minion.currentHealth -= amount;
-  if (amount > 0) emitVisualEvent("damage", { label: `-${amount}`, detail: minion.name, tone: "damage" });
+  if (amount > 0) emitVisualEvent("damage", { label: `-${amount}`, amount, detail: minion.name, tone: "damage", target: { type: "minion", ownerIndex, uid: minion.uid } });
   if (minion.currentHealth <= 0) killMinion(ownerIndex, minion.uid, source);
 }
 
@@ -688,13 +828,15 @@ function killMinion(ownerIndex, minionUid, source) {
   owner.deadMinions.push(dead);
   owner.discard.push(dead);
   owner.counters.deathsThisGame += 1;
+  recordEvent(currentTransaction, "minionDied", { label: dead.name, detail: owner.kind, tone: dead.faction, uid: dead.uid });
   triggerQuest(ownerIndex, "death", 1, dead);
   log(`${dead.name} 被擊敗。`);
-  const drawOnDeath = dead.effects.find((effect) => effect.type === "drawOnDeath");
+  const deathrattleEnabled = !hasStatus(dead, "deathrattleDisabled");
+  const drawOnDeath = deathrattleEnabled ? dead.effects.find((effect) => effect.type === "drawOnDeath") : null;
   if (drawOnDeath) drawCards(ownerIndex, drawOnDeath.amount);
-  const summonOnDeath = dead.effects.find((effect) => effect.type === "summonOnDeath");
+  const summonOnDeath = deathrattleEnabled ? dead.effects.find((effect) => effect.type === "summonOnDeath") : null;
   if (summonOnDeath) summonToken(ownerIndex, summonOnDeath.token);
-  const reviveOnDeath = dead.effects.find((effect) => effect.type === "reviveOnDeath");
+  const reviveOnDeath = deathrattleEnabled ? dead.effects.find((effect) => effect.type === "reviveOnDeath") : null;
   if (reviveOnDeath) reviveMinions(ownerIndex, reviveOnDeath.amount);
   if (owner.summoner.faction === "moon" && owner.counters.deathsThisGame % 3 === 0) summonToken(ownerIndex, "wraith");
   for (const artifact of owner.artifacts) {
@@ -722,7 +864,7 @@ function summonToken(playerIndex, tokenId) {
   emitVisualEvent("summon", { label: token.name, detail: "衍生物登場", tone: token.faction });
   triggerQuest(playerIndex, "summon", 1, token);
   if (token.tags.includes("dragon")) triggerQuest(playerIndex, "dragonSummon", 1, token);
-  if (token.tags.includes("guard") || token.tags.includes("ward") || token.shield) triggerQuest(playerIndex, "guardOrWardSummon", 1, token);
+  if (hasKeyword(token, "guard") || hasKeyword(token, "ward") || token.shield) triggerQuest(playerIndex, "guardOrWardSummon", 1, token);
   if (token.tags.includes("undead")) triggerQuest(playerIndex, "undeadSummon", 1, token);
   triggerSummonPassives(playerIndex, token);
 }
@@ -758,6 +900,30 @@ function triggerSpellPassives(playerIndex) {
   }
 }
 
+function triggerTurnStartPassives(playerIndex) {
+  withTransaction("turnStart", playerIndex, { name: PHASE_LABELS.startTurn, type: "phase", faction: state.players[playerIndex].summoner.faction }, () => {
+    const player = state.players[playerIndex];
+    for (const minion of player.board) {
+      const heal = minion.effects.find((effect) => effect.type === "startTurnHeal");
+      if (heal) healHero(playerIndex, heal.amount);
+      const buff = minion.effects.find((effect) => effect.type === "startTurnBuffBeasts");
+      if (buff) {
+        for (const ally of player.board.filter((item) => item.tags.includes("beast"))) {
+          ally.currentAttack += buff.attack;
+          ally.currentHealth += buff.health;
+          recordEvent(currentTransaction, "statusApplied", { label: "獸群成長", detail: ally.name, tone: player.summoner.faction });
+        }
+      }
+    }
+    for (const artifact of player.artifacts) {
+      const heal = artifact.effects.find((effect) => effect.type === "startTurnHeal");
+      if (heal) healHero(playerIndex, heal.amount);
+      const shield = artifact.effects.find((effect) => effect.type === "startTurnShield");
+      if (shield) gainShieldBestAlly(playerIndex);
+    }
+  });
+}
+
 function sacrificeDraw(playerIndex, target = null) {
   const player = state.players[playerIndex];
   if (!player.board.length) {
@@ -777,6 +943,7 @@ function reviveMinions(playerIndex, amount) {
     const revived = cloneCard(BASE_CARDS.concat(EVOLUTION_CARDS).find((item) => item.id === dead.id) || dead);
     revived.canAttack = false;
     player.board.push(revived);
+    emitVisualEvent("summon", { label: revived.name, detail: "復活登場", tone: revived.faction });
   }
 }
 
@@ -841,78 +1008,91 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
   const player = state.players[playerIndex];
   const opponent = state.players[1 - playerIndex];
   const attacker = player.board.find((item) => item.uid === attackerUid);
-  if (!attacker || !attacker.canAttack || attacker.attackedThisTurn) return;
+  if (!attacker || !attacker.canAttack || attacker.attackedThisTurn || hasStatus(attacker, "stunned") || hasStatus(attacker, "cannotAttack")) return;
 
-  const flameCounter = !targetUid ? opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "flameCounter")) : null;
-  if (flameCounter) {
-    opponent.secrets = opponent.secrets.filter((item) => item.uid !== flameCounter.uid);
-    emitVisualEvent("secretTrigger", { label: flameCounter.name, detail: "反擊攻擊者", tone: "secret" });
-    damageMinion(playerIndex, attacker.uid, 3, flameCounter);
-    log(`${opponent.kind}的 ${flameCounter.name} 反擊了攻擊者。`);
-    if (!player.board.some((item) => item.uid === attacker.uid)) return;
-  }
+  withTransaction("attack", playerIndex, attacker, (transaction) => {
+    state.phase = "combat";
+    player.phase = "combat";
+    recordEvent(transaction, "attackDeclared", { label: attacker.name, detail: targetUid ? "攻擊召喚物" : "攻擊英雄", tone: "damage", attackerUid, targetUid });
 
-  const ambush = opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "ambushGuard"));
-  if (ambush) {
-    opponent.secrets = opponent.secrets.filter((item) => item.uid !== ambush.uid);
-    emitVisualEvent("secretTrigger", { label: ambush.name, detail: "召喚伏兵", tone: "secret" });
-    summonToken(1 - playerIndex, "fawn");
-    const guardToken = opponent.board[opponent.board.length - 1];
-    if (guardToken) {
-      guardToken.tags.push("guard");
-      targetUid = guardToken.uid;
+    const flameCounter = !targetUid ? opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "flameCounter")) : null;
+    if (flameCounter) {
+      opponent.secrets = opponent.secrets.filter((item) => item.uid !== flameCounter.uid);
+      emitVisualEvent("secretTrigger", { label: flameCounter.name, detail: "反擊攻擊者", tone: "secret" });
+      damageMinion(playerIndex, attacker.uid, 3, flameCounter);
+      log(`${opponent.kind}的 ${flameCounter.name} 反擊了攻擊者。`);
+      if (!player.board.some((item) => item.uid === attacker.uid)) return;
     }
-    log(`${opponent.kind}的 ${ambush.name} 召喚守護伏兵。`);
-  }
 
-  const redirect = opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "redirectAttack"));
-  if (redirect) {
-    opponent.secrets = opponent.secrets.filter((item) => item.uid !== redirect.uid);
-    emitVisualEvent("secretTrigger", { label: redirect.name, detail: "轉移攻擊", tone: "secret" });
-    summonToken(1 - playerIndex, "wraith");
-    const wraith = opponent.board[opponent.board.length - 1];
-    targetUid = wraith?.uid ?? targetUid;
-    log(`${opponent.kind}的 ${redirect.name} 轉移了攻擊。`);
-  }
-
-  const guard = opponent.board.find((item) => item.tags.includes("guard"));
-  if (guard && targetUid !== guard.uid) targetUid = guard.uid;
-
-  triggerFirstAttackBuff(playerIndex, attacker);
-  const bonus = artifactAttackBonus(playerIndex);
-  const totalAttack = attacker.currentAttack + bonus;
-  attacker.attackedThisTurn = true;
-  attacker.canAttack = false;
-  emitVisualEvent("attack", { label: attacker.name, detail: targetUid ? "攻擊召喚物" : "攻擊英雄", tone: "damage" });
-
-  if (targetUid) {
-    const target = opponent.board.find((item) => item.uid === targetUid);
-    if (!target) return;
-    const hadShield = target.shield;
-    const beforeHealth = target.currentHealth;
-    damageMinion(1 - playerIndex, target.uid, totalAttack, attacker);
-    damageMinion(playerIndex, attacker.uid, target.currentAttack, target);
-    if (!hadShield && attacker.tags.includes("overwhelm") && totalAttack > beforeHealth) damageHero(1 - playerIndex, totalAttack - beforeHealth, playerIndex);
-    if (attacker.currentHealth <= 0) killMinion(playerIndex, attacker.uid, target);
-  } else {
-    damageHero(1 - playerIndex, totalAttack, playerIndex);
-  }
-  if (attacker.tags.includes("lifesteal")) healHero(playerIndex, totalAttack);
-
-  for (const artifact of player.artifacts) {
-    const effect = artifact.effects.find((item) => item.type === "firstAttackExpedition");
-    if (effect && !player.counters.firstAttackExpeditionUsed) {
-      player.counters.firstAttackExpeditionUsed = true;
-      addExpedition(playerIndex, effect.amount, artifact.name);
+    const ambush = opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "ambushGuard"));
+    if (ambush) {
+      opponent.secrets = opponent.secrets.filter((item) => item.uid !== ambush.uid);
+      emitVisualEvent("secretTrigger", { label: ambush.name, detail: "召喚伏兵", tone: "secret" });
+      summonToken(1 - playerIndex, "fawn");
+      const guardToken = opponent.board[opponent.board.length - 1];
+      if (guardToken) {
+        guardToken.tags.push("guard");
+        if (!guardToken.keywords.includes("guard")) guardToken.keywords.push("guard");
+        targetUid = guardToken.uid;
+        recordEvent(transaction, "targetChanged", { label: "守護改變目標", detail: guardToken.name, tone: "secret", targetUid });
+      }
+      log(`${opponent.kind}的 ${ambush.name} 召喚守護伏兵。`);
     }
-  }
-  checkGameOver();
+
+    const redirect = opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "redirectAttack"));
+    if (redirect) {
+      opponent.secrets = opponent.secrets.filter((item) => item.uid !== redirect.uid);
+      emitVisualEvent("secretTrigger", { label: redirect.name, detail: "轉移攻擊", tone: "secret" });
+      summonToken(1 - playerIndex, "wraith");
+      const wraith = opponent.board[opponent.board.length - 1];
+      targetUid = wraith?.uid ?? targetUid;
+      recordEvent(transaction, "targetChanged", { label: "攻擊目標改變", detail: wraith?.name ?? "亡魂", tone: "secret", targetUid });
+      log(`${opponent.kind}的 ${redirect.name} 轉移了攻擊。`);
+    }
+
+    const guard = opponent.board.find((item) => hasKeyword(item, "guard"));
+    if (guard && targetUid !== guard.uid) {
+      targetUid = guard.uid;
+      recordEvent(transaction, "targetChanged", { label: "守護強制目標", detail: guard.name, tone: "shield", targetUid });
+    }
+
+    triggerFirstAttackBuff(playerIndex, attacker);
+    const bonus = artifactAttackBonus(playerIndex);
+    const totalAttack = attacker.currentAttack + bonus;
+    attacker.attackedThisTurn = true;
+    attacker.canAttack = false;
+
+    if (targetUid) {
+      const target = opponent.board.find((item) => item.uid === targetUid);
+      if (!target) return;
+      const hadShield = target.shield;
+      const beforeHealth = target.currentHealth;
+      damageMinion(1 - playerIndex, target.uid, totalAttack, attacker);
+      damageMinion(playerIndex, attacker.uid, target.currentAttack, target);
+      if (!hadShield && hasKeyword(attacker, "overwhelm") && totalAttack > beforeHealth) damageHero(1 - playerIndex, totalAttack - beforeHealth, playerIndex);
+      if (attacker.currentHealth <= 0) killMinion(playerIndex, attacker.uid, target);
+    } else {
+      damageHero(1 - playerIndex, totalAttack, playerIndex);
+    }
+    if (hasKeyword(attacker, "lifesteal")) healHero(playerIndex, totalAttack);
+
+    for (const artifact of player.artifacts) {
+      const effect = artifact.effects.find((item) => item.type === "firstAttackExpedition");
+      if (effect && !player.counters.firstAttackExpeditionUsed) {
+        player.counters.firstAttackExpeditionUsed = true;
+        addExpedition(playerIndex, effect.amount, artifact.name);
+      }
+    }
+    state.phase = "main";
+    player.phase = "main";
+    checkGameOver();
+  });
 }
 
 function isLegalAttackTarget(playerIndex, target) {
   if (!target || target.ownerIndex !== 1 - playerIndex) return false;
   const opponent = state.players[1 - playerIndex];
-  const guard = opponent.board.find((item) => item.tags.includes("guard"));
+  const guard = opponent.board.find((item) => hasKeyword(item, "guard"));
   if (guard) return target.type === "minion" && target.uid === guard.uid;
   if (target.type === "hero") return true;
   return target.type === "minion" && opponent.board.some((item) => item.uid === target.uid);
@@ -942,6 +1122,7 @@ function triggerFirstAttackBuff(playerIndex, attacker) {
 function addExpedition(playerIndex, amount, source) {
   const player = state.players[playerIndex];
   player.expedition += amount;
+  recordEvent(currentTransaction, "questAdvanced", { label: `遠征 +${amount}`, detail: source, tone: player.summoner.faction, amount });
   log(`${player.kind}因 ${source} 推進遠征軌 +${amount}。`);
   checkEvolution(playerIndex);
 }
@@ -1004,7 +1185,7 @@ function scoreEvolutionChoice(playerIndex, choice) {
   const opponent = state.players[1 - playerIndex];
   let score = 10 - Math.max(0, choice.cost - player.maxMana);
   const effectTypes = choice.effects.map((effect) => effect.type);
-  if (player.hp <= 14 && (effectTypes.includes("healHero") || effectTypes.includes("healTarget") || choice.tags.includes("guard"))) score += 6;
+  if (player.hp <= 14 && (effectTypes.includes("healHero") || effectTypes.includes("healTarget") || hasKeyword(choice, "guard"))) score += 6;
   if (player.hand.length <= 3 && effectTypes.some((type) => type.includes("draw"))) score += 5;
   if (boardAttack(player) < boardAttack(opponent) && (choice.type === "minion" || effectTypes.includes("summonToken") || effectTypes.includes("damageAllEnemies"))) score += 5;
   if (player.artifacts.length && (effectTypes.includes("buffAll") || effectTypes.includes("buffAlly"))) score += 2;
@@ -1029,16 +1210,18 @@ function chooseEvolution(playerIndex, cardId) {
   const player = state.players[playerIndex];
   const selected = EVOLUTION_CARDS.find((item) => item.id === cardId);
   if (!selected) return;
-  player.selectedEvolutions.push(selected.id);
-  player.evolutionCount += 1;
-  player.pendingEvolution = null;
-  const newCard = cloneCard(selected);
-  if (selected.immediate && player.hand.length < 10) player.hand.push(newCard);
-  else player.deck.splice(Math.floor(rng() * (player.deck.length + 1)), 0, newCard);
-  emitVisualEvent("evolution", { label: selected.name, detail: selected.immediate ? "加入手牌" : "洗入牌組", tone: selected.faction });
-  log(`${player.kind}選擇進化：${selected.name}。`);
-  state.waitingForEvolution = false;
-  if (!state.simulating) els.evoModal.classList.add("hidden");
+  withTransaction("evolution", playerIndex, selected, (transaction) => {
+    player.selectedEvolutions.push(selected.id);
+    player.evolutionCount += 1;
+    player.pendingEvolution = null;
+    const newCard = cloneCard(selected);
+    if (selected.immediate && player.hand.length < 10) player.hand.push(newCard);
+    else player.deck.splice(Math.floor(rng() * (player.deck.length + 1)), 0, newCard);
+    recordEvent(transaction, "evolutionUnlocked", { label: selected.name, detail: selected.immediate ? "加入手牌" : "洗入牌組", tone: selected.faction, cardId: selected.id });
+    log(`${player.kind}選擇進化：${selected.name}。`);
+    state.waitingForEvolution = false;
+    if (!state.simulating) els.evoModal.classList.add("hidden");
+  });
   render();
   if (!state.simulating && state.active === 1) setTimeout(aiTurn, 500);
 }
@@ -1138,7 +1321,7 @@ function chooseAiTargetForCard(playerIndex, cardToPlay) {
   const opponent = state.players[1 - playerIndex];
   if (targetRule === "enemy") {
     const damage = estimateCardDamage(playerIndex, cardToPlay);
-    const guard = opponent.board.find((item) => item.tags.includes("guard"));
+    const guard = opponent.board.find((item) => hasKeyword(item, "guard"));
     if (guard) return { type: "minion", ownerIndex: 1 - playerIndex, uid: guard.uid };
     if (opponent.hp <= 14 || boardAttack(state.players[playerIndex]) >= boardAttack(opponent)) return { type: "hero", ownerIndex: 1 - playerIndex };
     const killable = [...opponent.board]
@@ -1194,7 +1377,7 @@ function spellDamageBonusPreview(playerIndex, source) {
 function chooseAiAttackTarget(playerIndex, attacker) {
   const opponent = state.players[1 - playerIndex];
   if (opponent.hp <= attacker.currentAttack + artifactAttackBonus(playerIndex)) return { type: "hero" };
-  const guard = opponent.board.find((item) => item.tags.includes("guard"));
+  const guard = opponent.board.find((item) => hasKeyword(item, "guard"));
   if (guard) return { type: "minion", uid: guard.uid };
   const killable = [...opponent.board]
     .filter((item) => item.currentHealth <= attacker.currentAttack)
@@ -1230,13 +1413,155 @@ function log(message) {
   state.logs = state.logs.slice(0, 80);
 }
 
+function beginTransaction(kind, actorIndex, source = null) {
+  const transaction = {
+    id: `tx${++transactionUid}`,
+    kind,
+    actorIndex,
+    source: source ? { id: source.id, uid: source.uid, name: source.name, type: source.type, faction: source.faction } : null,
+    events: [],
+    triggerCount: 0,
+  };
+  currentTransaction = transaction;
+  recordEvent(transaction, "start", { label: source?.name ?? eventLabel(kind), tone: source?.faction, kind });
+  return transaction;
+}
+
+function recordEvent(transaction, type, payload = {}) {
+  if (!transaction) return;
+  transaction.events.push({ type, payload, order: transaction.events.length });
+}
+
+function commitTransaction(transaction) {
+  if (!transaction) return;
+  recordEvent(transaction, "end", { label: "結算完成", kind: transaction.kind });
+  if (state?.transactions) state.transactions = [transaction, ...state.transactions].slice(0, 25);
+  if (currentTransaction === transaction) currentTransaction = null;
+  if (!hasDom || state?.simulating) return;
+  queueVisualTimeline(buildVisualTimeline(transaction));
+}
+
+function withTransaction(kind, actorIndex, source, callback) {
+  if (currentTransaction) return callback(currentTransaction);
+  const transaction = beginTransaction(kind, actorIndex, source);
+  try {
+    return callback(transaction);
+  } finally {
+    if (state?.players?.[actorIndex] && ["attack", "heroPower", "playCard"].includes(kind)) {
+      if (state.phase !== "endTurn" && state.phase !== "cleanup") {
+        state.phase = "main";
+        state.players[actorIndex].phase = "main";
+      }
+    }
+    commitTransaction(transaction);
+  }
+}
+
 function emitVisualEvent(type, payload = {}) {
-  if (!hasDom || !state || state.simulating) return;
-  const event = { type, payload, id: `v${Date.now()}-${visualQueue.length}` };
-  state.visualQueue?.push(event);
-  visualQueue.push(event);
-  state.visualQueue = visualQueue;
+  if (!state) return;
+  const eventType = visualTypeToRuleEvent(type);
+  if (currentTransaction) {
+    recordEvent(currentTransaction, eventType, { ...payload, visualType: type });
+    return;
+  }
+  if (!hasDom || state.simulating) return;
+  const transaction = {
+    id: `tx${++transactionUid}`,
+    kind: type,
+    actorIndex: state.active ?? 0,
+    source: null,
+    events: [
+      { type: "start", payload: { label: payload.label ?? eventLabel(type), tone: payload.tone, kind: type }, order: 0 },
+      { type: eventType, payload: { ...payload, visualType: type }, order: 1 },
+      { type: "end", payload: { label: "結算完成", kind: type }, order: 2 },
+    ],
+  };
+  queueVisualTimeline(buildVisualTimeline(transaction));
+}
+
+function visualTypeToRuleEvent(type) {
+  return {
+    playCard: "cardPlayed",
+    attack: "attackDeclared",
+    damage: "damageApplied",
+    heal: "healingApplied",
+    shield: "shieldGained",
+    shieldBreak: "shieldBroken",
+    secretTrigger: "secretTriggered",
+    summon: "minionSummoned",
+    evolution: "evolutionUnlocked",
+  }[type] ?? type;
+}
+
+function queueVisualTimeline(steps) {
+  if (!hasDom || !steps.length || state?.simulating) return;
+  for (const step of steps) visualQueue.push({ ...step, id: `${step.transactionId}-${step.index}` });
+  if (state) state.visualQueue = visualQueue;
   scheduleVisualQueue();
+}
+
+function buildVisualTimeline(transaction) {
+  const events = transaction.events.filter((event) => !["start", "end", "costPaid"].includes(event.type));
+  if (!events.length) return [];
+  const steps = [];
+  const pushStep = (type, label, detail, tone, items = []) => {
+    steps.push({
+      type,
+      payload: { label, detail, tone, items, hint: label },
+      transactionId: transaction.id,
+      index: steps.length,
+    });
+  };
+
+  const first = events.find((event) => ["cardPlayed", "heroPowerUsed", "attackDeclared"].includes(event.type));
+  if (first) {
+    const type = first.type === "cardPlayed" ? "playCard" : first.type === "heroPowerUsed" ? "heroPower" : "attack";
+    pushStep(type, first.payload.label ?? eventLabel(type), first.payload.detail ?? "", first.payload.tone ?? transaction.source?.faction);
+  }
+
+  const secrets = events.filter((event) => ["secretTriggered", "targetChanged"].includes(event.type));
+  if (secrets.length) {
+    const label = secrets.length === 1 ? secrets[0].payload.label : `${secrets.length} 個反制/改目標`;
+    const detail = secrets.map((event) => event.payload.detail || event.payload.label).filter(Boolean).join("、");
+    pushStep("secretTrigger", label, detail, "secret", secrets);
+  }
+
+  const shields = events.filter((event) => ["shieldBroken", "shieldGained", "statusApplied"].includes(event.type));
+  if (shields.length) {
+    const broken = shields.filter((event) => event.type === "shieldBroken").length;
+    const gained = shields.filter((event) => event.type === "shieldGained").length;
+    const label = broken ? `${broken} 次護盾抵銷` : gained ? `${gained} 次護盾` : "狀態變化";
+    const detail = shields.map((event) => event.payload.detail || event.payload.label).filter(Boolean).join("、");
+    pushStep(broken ? "shieldBreak" : "shield", label, detail, broken ? "shield" : "status", shields);
+  }
+
+  const damage = events.filter((event) => event.type === "damageApplied");
+  if (damage.length) {
+    pushStep("damage", `-${sumTimelineNumbers(damage)}`, `${damage.length} 個傷害目標`, "damage", damage);
+  }
+
+  const healing = events.filter((event) => event.type === "healingApplied");
+  if (healing.length) {
+    pushStep("heal", `+${sumTimelineNumbers(healing)}`, `${healing.length} 個治療目標`, "heal", healing);
+  }
+
+  const deaths = events.filter((event) => event.type === "minionDied");
+  const summons = events.filter((event) => event.type === "minionSummoned");
+  if (deaths.length || summons.length) {
+    const label = deaths.length && summons.length ? `${deaths.length} 死亡 / ${summons.length} 召喚` : deaths.length ? `${deaths.length} 個召喚物死亡` : `${summons.length} 次召喚`;
+    const detail = [...deaths, ...summons].map((event) => event.payload.label).filter(Boolean).join("、");
+    pushStep(summons.length ? "summon" : "death", label, detail, summons[0]?.payload.tone ?? deaths[0]?.payload.tone ?? "summon", [...deaths, ...summons]);
+  }
+
+  const progress = events.filter((event) => ["questAdvanced", "evolutionUnlocked"].includes(event.type));
+  if (progress.length) {
+    const evo = progress.find((event) => event.type === "evolutionUnlocked");
+    const label = evo ? evo.payload.label : progress[0].payload.label ?? "遠征推進";
+    const detail = progress.map((event) => event.payload.detail || event.payload.label).filter(Boolean).join("、");
+    pushStep(evo ? "evolution" : "quest", label, detail, evo?.payload.tone ?? "evolution", progress);
+  }
+
+  return compactTimeline(steps, transaction.kind);
 }
 
 function scheduleVisualQueue() {
@@ -1249,7 +1574,7 @@ function scheduleVisualQueue() {
 
 function processVisualQueue() {
   if (visualBusy || !els.visualOverlay) return;
-  const event = takeNextVisualEvent();
+  const event = visualQueue.shift() ?? null;
   if (state) state.visualQueue = visualQueue;
   if (!event) return;
   visualBusy = true;
@@ -1270,68 +1595,51 @@ function processVisualQueue() {
   }, currentAnimationDuration());
 }
 
-function takeNextVisualEvent() {
-  if (!visualQueue.length) return null;
-  const burst = visualQueue.splice(0, visualQueue.length);
-  return summarizeVisualBurst(burst);
-}
-
-function summarizeVisualBurst(events) {
-  const filtered = dedupeVisualEvents(events);
-  const priority = {
-    secretTrigger: 100,
-    evolution: 90,
-    attack: 80,
-    shieldBreak: 76,
-    damage: 74,
-    heal: 68,
-    shield: 62,
-    summon: 54,
-    playCard: 40,
-  };
-  const grouped = filtered.reduce((map, event) => {
-    map.set(event.type, [...(map.get(event.type) ?? []), event]);
-    return map;
-  }, new Map());
-  for (const type of ["damage", "heal", "summon"]) {
-    const items = grouped.get(type) ?? [];
-    if (items.length > 1) {
-      return {
-        type,
-        payload: {
-          label: type === "damage" ? `-${sumEventNumbers(items)}` : type === "heal" ? `+${sumEventNumbers(items)}` : `${items.length} 次召喚`,
-          detail: type === "summon" ? "連續登場" : `${items.length} 個目標`,
-          tone: items[0].payload.tone,
-        },
-        id: items[0].id,
-      };
-    }
+function compactTimeline(steps, kind) {
+  const maxSteps = ANIMATION_SETTINGS.maxSteps[animationDetail] ?? ANIMATION_SETTINGS.maxSteps.standard;
+  if (steps.length <= maxSteps) return steps.map((step, index) => ({ ...step, index }));
+  if (animationDetail === "compact") {
+    const first = steps[0];
+    const last = steps.find((step) => ["evolution", "quest", "summon"].includes(step.type)) ?? steps[steps.length - 1];
+    const middle = mergeTimelineSteps(steps.slice(1, -1), kind);
+    return [first, middle, last].filter(Boolean).slice(0, maxSteps).map((step, index) => ({ ...step, index }));
   }
-  return filtered.sort((a, b) => (priority[b.type] ?? 0) - (priority[a.type] ?? 0))[0] ?? events[0];
+  const head = steps.slice(0, maxSteps - 1);
+  const tail = mergeTimelineSteps(steps.slice(maxSteps - 1), kind);
+  return [...head, tail].filter(Boolean).map((step, index) => ({ ...step, index }));
 }
 
-function dedupeVisualEvents(events) {
-  const seen = new Set();
-  return events.filter((event) => {
-    const key = `${event.type}|${event.payload.label ?? ""}|${event.payload.detail ?? ""}|${event.payload.tone ?? ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function mergeTimelineSteps(steps, kind) {
+  if (!steps.length) return null;
+  const items = steps.flatMap((step) => step.payload.items ?? []);
+  return {
+    type: "summary",
+    payload: {
+      label: `${steps.length} 段連鎖結算`,
+      detail: steps.map((step) => step.payload.label).join("、"),
+      tone: kind,
+      items,
+      hint: "連鎖結算",
+    },
+    transactionId: steps[0].transactionId,
+    index: steps[0].index,
+  };
 }
 
-function sumEventNumbers(events) {
-  return events.reduce((sum, event) => sum + Math.abs(Number(String(event.payload.label ?? "").replace(/[^0-9.-]/g, "")) || 0), 0);
+function sumTimelineNumbers(events) {
+  return events.reduce((sum, event) => sum + Math.abs(Number(String(event.payload.label ?? "").replace(/[^0-9.-]/g, "")) || Number(event.payload.amount) || 0), 0);
 }
 
 function buildVisualNode(event) {
   const node = document.createElement("div");
   const tone = event.payload.tone ?? event.type;
   node.className = `visual-event ${event.type} tone-${tone}`;
+  const itemLine = event.payload.items?.length > 1 ? `<small>${event.payload.items.map((item) => item.payload?.detail || item.payload?.label).filter(Boolean).slice(0, 4).join(" · ")}</small>` : "";
   node.innerHTML = `
     ${effectImage(event)}
     <strong>${event.payload.label ?? eventLabel(event.type)}</strong>
     <span>${event.payload.detail ?? ""}</span>
+    ${itemLine}
     ${event.type === "attack" ? `<i class="attack-streak"></i>` : ""}
   `;
   return node;
@@ -1346,6 +1654,10 @@ function effectImage(event) {
     secretTrigger: "secret",
     evolution: "evolution",
     summon: "evolution",
+    death: "damage",
+    quest: "evolution",
+    heroPower: "evolution",
+    summary: "evolution",
     playCard: "evolution",
     attack: "damage",
   }[event.type] ?? "evolution";
@@ -1357,11 +1669,15 @@ function eventLabel(type) {
     attack: "進攻",
     damage: "傷害",
     heal: "治療",
+    heroPower: "召喚師技能",
     playCard: "出牌",
     secretTrigger: "秘儀觸發",
     shield: "護盾",
     shieldBreak: "護盾破裂",
     summon: "召喚",
+    death: "死亡",
+    quest: "任務推進",
+    summary: "連鎖結算",
     evolution: "進化突破",
   };
   return labels[type] ?? "戰況";
@@ -1393,7 +1709,7 @@ function currentAnimationDuration() {
 function loadAnimationSpeed() {
   if (!hasDom) return "normal";
   const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-  const stored = localStorage.getItem(ANIMATION_SETTINGS.storageKey);
+  const stored = localStorage.getItem(ANIMATION_SETTINGS.speedStorageKey);
   if (["normal", "fast", "off"].includes(stored)) return stored;
   return reduced ? "fast" : "normal";
 }
@@ -1401,14 +1717,29 @@ function loadAnimationSpeed() {
 function setAnimationSpeed(value) {
   animationSpeed = ["normal", "fast", "off"].includes(value) ? value : "normal";
   if (hasDom) {
-    localStorage.setItem(ANIMATION_SETTINGS.storageKey, animationSpeed);
+    localStorage.setItem(ANIMATION_SETTINGS.speedStorageKey, animationSpeed);
     document.documentElement.dataset.animationSpeed = animationSpeed;
     if (els.animationSpeed) els.animationSpeed.value = animationSpeed;
   }
 }
 
+function loadAnimationDetail() {
+  if (!hasDom) return "standard";
+  const stored = localStorage.getItem(ANIMATION_SETTINGS.detailStorageKey);
+  return ["compact", "standard", "full"].includes(stored) ? stored : "standard";
+}
+
+function setAnimationDetail(value) {
+  animationDetail = ["compact", "standard", "full"].includes(value) ? value : "standard";
+  if (hasDom) {
+    localStorage.setItem(ANIMATION_SETTINGS.detailStorageKey, animationDetail);
+    document.documentElement.dataset.animationDetail = animationDetail;
+    if (els.animationDetail) els.animationDetail.value = animationDetail;
+  }
+}
+
 function runBalanceSimulation(gameCount = 50) {
-  const summary = runHeadlessSimulation(gameCount, { seed: 405 });
+  const summary = runHeadlessSimulation(gameCount, { seed: 101 });
   renderBalanceSummary(summary);
   render();
 }
@@ -1425,8 +1756,11 @@ export function runHeadlessSimulation(gameCount = 50, options = {}) {
       const secondRecipe = DECK_ARCHETYPES[(i + 3) % DECK_ARCHETYPES.length];
       results.push(simulateGame(firstRecipe.summonerId, secondRecipe.summonerId, { ...options, firstRecipe, secondRecipe }));
     } else {
-      const first = SUMMONERS[i % SUMMONERS.length].id;
-      const second = SUMMONERS[(i + 2) % SUMMONERS.length].id;
+      const pairIndex = i % SUMMONERS.length;
+      const cycle = Math.floor(i / SUMMONERS.length);
+      let first = SUMMONERS[pairIndex].id;
+      let second = SUMMONERS[(pairIndex + 2) % SUMMONERS.length].id;
+      if (cycle % 2 === 1) [first, second] = [second, first];
       results.push(simulateGame(first, second, options));
     }
   }
@@ -1447,6 +1781,8 @@ export function simulateGame(firstSummonerId, secondSummonerId, options = {}) {
     waitingForEvolution: false,
     pendingAction: null,
     visualQueue: [],
+    transactions: [],
+    phase: "main",
     simulating: true,
   };
   drawCards(0, 4);
@@ -1466,6 +1802,7 @@ export function simulateGame(firstSummonerId, secondSummonerId, options = {}) {
     peakBoardAttackGap = Math.max(peakBoardAttackGap, Math.abs(boardAttack(state.players[0]) - boardAttack(state.players[1])));
     if (state.gameOver) break;
     const next = state.active === 0 ? 1 : 0;
+    cleanupTemporaryBuffs(state.active);
     if (next === 0) state.turn += 1;
     startTurn(next);
   }
@@ -1633,13 +1970,14 @@ function renderMetrics() {
   const [player, opponent] = state.players;
   const playerAttack = boardAttack(player);
   const opponentAttack = boardAttack(opponent);
+  const phaseText = PHASE_LABELS[state.phase] ?? PHASE_LABELS[state.players[state.active]?.phase] ?? "主要階段";
   const pendingText = state.pendingAction
     ? state.pendingAction.type === "attackTarget"
       ? "選擇攻擊目標"
       : "選擇卡牌目標"
     : state.active === 0
-      ? "玩家回合"
-      : "對手回合";
+      ? `玩家回合 · ${phaseText}`
+      : `對手回合 · ${phaseText}`;
   els.metrics.innerHTML = `
     <div><strong>${state.turn}</strong><span>回合</span></div>
     <div><strong>${player.evolutionCount}/${opponent.evolutionCount}</strong><span>進化 我/敵</span></div>
@@ -1680,6 +2018,7 @@ function getMinionClasses(ownerIndex, minion) {
   if (state.pendingAction?.type === "attackTarget" && state.pendingAction.attackerUid === minion.uid) classes.push("selected-attacker");
   if (isPendingMinionTarget(ownerIndex, minion)) classes.push("legal-target");
   else if (state.pendingAction) classes.push("illegal-target");
+  for (const status of minion.statuses ?? []) classes.push(`status-${status}`);
   return classes.join(" ");
 }
 
@@ -1709,7 +2048,8 @@ function boardMarkup(item) {
   return `
     <img class="board-emblem" src="${theme.emblem}" alt="" />
     <h4>${item.name}</h4>
-    ${keywordMarkup(item.tags, item.shield)}
+    ${keywordMarkup(keywordsOf(item), item.shield)}
+    ${statusMarkup(item)}
     <div class="text">${item.text}</div>
     <div class="stats"><span>攻 ${item.currentAttack}</span><span>速 ${item.stats.speed}</span><span>命 ${item.currentHealth}</span></div>
   `;
@@ -1721,6 +2061,22 @@ function keywordMarkup(tags = [], shield = false) {
   const keywords = keywordTags.map((tag) => ({ tag, label: KEYWORD_LABELS[tag] }));
   if (!keywords.length) return "";
   return `<div class="keywords">${keywords.map(({ tag, label }) => `<span title="${keywordHelp(label)}"><img src="${ART_MANIFEST.icons.keywords[tag]}" alt="" />${label}</span>`).join("")}</div>`;
+}
+
+function statusMarkup(item) {
+  const statuses = (item.statuses ?? []).filter((status) => SUPPORTED_STATUSES.has(status));
+  if (!statuses.length) return "";
+  return `<div class="status-badges">${statuses.map((status) => `<span class="status-badge ${status}" title="${statusHelp(status)}">${statusLabel(status)}</span>`).join("")}</div>`;
+}
+
+function statusHelp(status) {
+  return {
+    silenced: "失去文字效果與關鍵字。",
+    stunned: "本回合不能攻擊。",
+    cannotAttack: "暫時不能攻擊。",
+    deathrattleDisabled: "死亡時效果不會觸發。",
+    temporaryBuff: "回合結束時移除的增益。",
+  }[status] ?? status;
 }
 
 function keywordHelp(word) {
@@ -2063,7 +2419,9 @@ function renderSummoners() {
 
 function initBrowserGame() {
   setAnimationSpeed(loadAnimationSpeed());
+  setAnimationDetail(loadAnimationDetail());
   els.animationSpeed.addEventListener("change", () => setAnimationSpeed(els.animationSpeed.value));
+  els.animationDetail.addEventListener("change", () => setAnimationDetail(els.animationDetail.value));
   els.endTurn.addEventListener("click", endTurn);
   els.newGame.addEventListener("click", () => location.reload());
   els.simulate.addEventListener("click", () => runBalanceSimulation(50));

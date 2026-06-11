@@ -31,6 +31,7 @@ export const SUPPORTED_EFFECTS = new Set([
   "damageAllyMinion",
   "damageHero",
   "deathExpedition",
+  "disableDeathrattle",
   "destroyArtifact",
   "dragonJudgment",
   "draw",
@@ -51,6 +52,7 @@ export const SUPPORTED_EFFECTS = new Set([
   "flameCounter",
   "gainMana",
   "gainShield",
+  "gainShieldBestAlly",
   "healHero",
   "healOnBeast",
   "healTarget",
@@ -64,9 +66,14 @@ export const SUPPORTED_EFFECTS = new Set([
   "spellDamageAura",
   "spellPing",
   "spellShield",
+  "startTurnBuffBeasts",
+  "startTurnHeal",
+  "startTurnShield",
+  "stunTarget",
   "summonIfDeaths",
   "summonOnDeath",
   "summonToken",
+  "temporaryBuff",
   "upgradeHeroPower",
   "wardSpellTarget",
 ]);
@@ -77,6 +84,8 @@ const TYPES = new Set(Object.keys(TYPE_LABELS));
 const RARITIES = new Set(["common", "rare", "token", "強化", "發現", "覺醒"]);
 const QUEST_TRIGGERS = new Set(["artifact", "death", "dragonSummon", "guardOrWardSummon", "heal", "heroDamage", "secretOrSilence", "spell", "summon", "undeadSummon"]);
 const QUEST_REWARD_TYPES = new Set(["buffAll", "damageHero", "draw", "shield", "summonToken"]);
+const SUPPORTED_KEYWORDS = new Set(["guard", "swift", "ward", "lifesteal", "overwhelm"]);
+const SUPPORTED_STATUSES = new Set(["silenced", "stunned", "cannotAttack", "deathrattleDisabled", "temporaryBuff"]);
 const OUTPUTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../outputs");
 
 export function validateCards() {
@@ -96,6 +105,10 @@ export function validateCards() {
     if (!RARITIES.has(card.rarity)) errors.push(`${card.id} rarity 不支援: ${card.rarity}`);
     if (!Array.isArray(card.tags)) errors.push(`${card.id} tags 必須是陣列`);
     if (!Array.isArray(card.effects)) errors.push(`${card.id} effects 必須是陣列`);
+    for (const tag of card.tags ?? []) {
+      if (tag.startsWith("status:") && !SUPPORTED_STATUSES.has(tag.slice(7))) errors.push(`${card.id} status tag 不支援: ${tag}`);
+      if (tag.startsWith("keyword:") && !SUPPORTED_KEYWORDS.has(tag.slice(8))) errors.push(`${card.id} keyword tag 不支援: ${tag}`);
+    }
 
     if (card.type === "minion") {
       const stats = card.stats ?? {};

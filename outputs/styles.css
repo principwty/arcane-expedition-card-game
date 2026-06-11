@@ -669,6 +669,13 @@ h1 {
   font-size: 12px;
 }
 
+.visual-event small {
+  max-width: 220px;
+  color: color-mix(in srgb, var(--muted) 82%, white);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
 .visual-event.attack {
   left: 50%;
   top: 50%;
@@ -693,6 +700,12 @@ h1 {
   top: 42%;
 }
 
+.visual-event.heroPower,
+.visual-event.quest,
+.visual-event.summary {
+  top: 38%;
+}
+
 .tone-damage {
   border-color: rgba(251, 113, 133, .72);
 }
@@ -702,7 +715,8 @@ h1 {
 }
 
 .tone-shield,
-.tone-secret {
+.tone-secret,
+.tone-status {
   border-color: rgba(125, 211, 252, .72);
 }
 
@@ -945,6 +959,41 @@ h1 {
   height: 12px;
 }
 
+.status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: -2px 0 7px;
+}
+
+.status-badge {
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.status-badge.silenced,
+.status-badge.deathrattleDisabled {
+  border-color: rgba(192, 132, 252, .55);
+  background: rgba(192, 132, 252, .16);
+}
+
+.status-badge.stunned,
+.status-badge.cannotAttack {
+  border-color: rgba(251, 113, 133, .58);
+  background: rgba(251, 113, 133, .14);
+}
+
+.status-badge.temporaryBuff {
+  border-color: rgba(255, 209, 102, .65);
+  background: rgba(255, 209, 102, .14);
+}
+
 .card .text {
   flex: 1;
   color: var(--muted);
@@ -978,6 +1027,15 @@ h1 {
 .board-card.can-attack {
   box-shadow: inset 0 0 0 2px var(--gold), 0 0 0 4px rgba(255, 209, 102, .18), 0 18px 48px rgba(0, 0, 0, .24);
   cursor: pointer;
+}
+
+.board-card.status-silenced {
+  filter: saturate(.62);
+}
+
+.board-card.status-stunned,
+.board-card.status-cannotAttack {
+  opacity: .72;
 }
 
 .board-card.selected-attacker {

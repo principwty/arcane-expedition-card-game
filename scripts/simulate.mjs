@@ -1,7 +1,7 @@
 import { runHeadlessSimulation } from "../outputs/app.js";
 
 const gameCount = Number.parseInt(process.argv[2] ?? "50", 10);
-const seed = Number.parseInt(process.argv[3] ?? "405", 10);
+const seed = Number.parseInt(process.argv[3] ?? "101", 10);
 const summary = runHeadlessSimulation(gameCount, { seed });
 const archetypeSummary = runHeadlessSimulation(gameCount, { seed: seed + 700, archetypes: true });
 

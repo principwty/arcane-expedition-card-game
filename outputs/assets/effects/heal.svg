@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="治療演出">
+  <circle cx="90" cy="90" r="74" fill="#86efac" opacity=".28"/>
+  <path d="M74 28h32v46h46v32h-46v46H74v-46H28V74h46z" fill="#86efac"/>
+  <path d="M90 18c40 44 40 88 0 132-40-44-40-88 0-132z" fill="none" stroke="#facc15" stroke-width="8" opacity=".68"/>
+</svg>

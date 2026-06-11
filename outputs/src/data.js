@@ -24,6 +24,13 @@ export const FACTION_LABELS = {
 
 export const ART_MANIFEST = {
   cardBack: "./assets/textures/card-back.svg",
+  effects: {
+    damage: "./assets/effects/damage.svg",
+    heal: "./assets/effects/heal.svg",
+    shieldBreak: "./assets/effects/shield-break.svg",
+    secret: "./assets/effects/secret.svg",
+    evolution: "./assets/effects/evolution.svg",
+  },
   icons: {
     types: {
       minion: "./assets/icons/type-minion.svg",
@@ -51,6 +58,23 @@ export const ART_MANIFEST = {
     moon: "./assets/factions/moon-card.svg",
     iron: "./assets/factions/iron-card.svg",
     neutral: "./assets/factions/neutral-card.svg",
+  },
+  cardArt: {
+    "astral-bolt": "./assets/cards/astral-bolt.svg",
+    "mirror-rune": "./assets/cards/mirror-rune.svg",
+    "astral-ascension": "./assets/cards/astral-ascension.svg",
+    "fawncaller-piper": "./assets/cards/fawncaller-piper.svg",
+    "great-stag": "./assets/cards/great-stag.svg",
+    "worldroot-blessing": "./assets/cards/worldroot-blessing.svg",
+    "ember-squire": "./assets/cards/ember-squire.svg",
+    "dragon-judgment": "./assets/cards/dragon-judgment.svg",
+    "apex-dragon": "./assets/cards/apex-dragon.svg",
+    "bone-acolyte": "./assets/cards/bone-acolyte.svg",
+    "moon-echo": "./assets/cards/moon-echo.svg",
+    "grave-covenant": "./assets/cards/grave-covenant.svg",
+    "expedition-banner": "./assets/cards/expedition-banner.svg",
+    "bulwark-sentinel": "./assets/cards/bulwark-sentinel.svg",
+    "arsenal-awakening": "./assets/cards/arsenal-awakening.svg",
   },
 };
 
@@ -302,6 +326,8 @@ export const TOKENS = {
   fireling: card("token-fireling", "幼火龍", 0, "minion", "dragon", "token", { attack: 4, health: 3, speed: 1 }, "火翼剛展，已經很兇。", ["dragon"], []),
 };
 
+applyRepresentativeArt();
+
 export const COIN_CARD = card("coin", "星砂硬幣", 0, "spell", "neutral", "token", null, "本回合獲得 1 點法力。", ["resource"], [{ type: "gainMana", amount: 1 }]);
 export const SECOND_SUPPLY_CARD = card("second-supply", "後手補給", 0, "spell", "neutral", "token", null, "抽 1 張牌，本回合獲得 1 點法力。", ["resource"], [{ type: "draw", amount: 1 }, { type: "gainMana", amount: 1 }]);
 
@@ -373,4 +399,12 @@ function defaultDeckCardIds(faction) {
     index += 1;
   }
   return cardIds.slice(0, DECK_RULES.size);
+}
+
+function applyRepresentativeArt() {
+  const cards = [...BASE_CARDS, ...EVOLUTION_CARDS];
+  for (const [id, image] of Object.entries(ART_MANIFEST.cardArt)) {
+    const item = cards.find((candidate) => candidate.id === id);
+    if (item) item.art = { image, focus: "center", fallback: item.faction };
+  }
 }

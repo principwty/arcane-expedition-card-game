@@ -110,6 +110,14 @@
             <h2 id="matchTitle">星穹學派 對 龍焰王庭</h2>
           </div>
           <div class="topbar-actions">
+            <label class="speed-control">
+              <span>動畫</span>
+              <select id="animationSpeed">
+                <option value="normal">正常</option>
+                <option value="fast">快速</option>
+                <option value="off">關閉</option>
+              </select>
+            </label>
             <button id="simulateBtn" class="button secondary">模擬 50 場</button>
             <button id="newGameBtn" class="button secondary">新對局</button>
             <button id="endTurnBtn" class="button primary">結束回合</button>
@@ -118,6 +126,8 @@
 
         <section id="opponentArea" class="player-zone opponent"></section>
         <section class="battlefield">
+          <div id="actionHint" class="action-hint">準備遠征</div>
+          <div id="visualOverlay" class="visual-overlay" aria-hidden="true"></div>
           <div id="opponentArtifacts" class="side-slots"></div>
           <div id="opponentBoard" class="board-row"></div>
           <div id="playerBoard" class="board-row"></div>

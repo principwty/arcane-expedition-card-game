@@ -34,6 +34,13 @@ let state;
 let uid = 0;
 let rng = Math.random;
 const hasDom = typeof document !== "undefined";
+const ANIMATION_SETTINGS = {
+  storageKey: "arcane-expedition-animation-speed-v1",
+  durations: { normal: 760, fast: 260, off: 0 },
+};
+let animationSpeed = "normal";
+let visualQueue = [];
+let visualBusy = false;
 const builder = {
   summonerId: "star",
   activeDeckId: null,
@@ -78,6 +85,9 @@ const els = hasDom
       log: document.querySelector("#log"),
       metrics: document.querySelector("#metrics"),
       balanceSummary: document.querySelector("#balanceSummary"),
+      actionHint: document.querySelector("#actionHint"),
+      visualOverlay: document.querySelector("#visualOverlay"),
+      animationSpeed: document.querySelector("#animationSpeed"),
       endTurn: document.querySelector("#endTurnBtn"),
       newGame: document.querySelector("#newGameBtn"),
       simulate: document.querySelector("#simulateBtn"),
@@ -191,8 +201,12 @@ function startMatch(playerSummonerId, playerRecipe = null) {
     gameOver: false,
     waitingForEvolution: false,
     pendingAction: null,
+    visualQueue: [],
     simulating: false,
   };
+  visualQueue = [];
+  visualBusy = false;
+  if (els.visualOverlay) els.visualOverlay.innerHTML = "";
   drawCards(0, 4);
   drawCards(1, 4);
   state.players[1].hp = 30;
@@ -319,6 +333,7 @@ function playCard(playerIndex, cardUid, target = null) {
   player.mana -= played.cost;
   state.pendingAction = null;
   log(`${player.kind}使用了 ${played.name}。`);
+  emitVisualEvent("playCard", { label: played.name, detail: TYPE_LABELS[played.type], tone: played.faction });
 
   if (played.type === "minion") {
     summonMinion(playerIndex, played, target);
@@ -334,6 +349,7 @@ function playCard(playerIndex, cardUid, target = null) {
   } else if (played.type === "secret") {
     player.secrets.push(played);
     triggerQuest(playerIndex, "secretOrSilence", 1, played);
+    emitVisualEvent("secretTrigger", { label: "秘儀設置", detail: played.name, tone: "secret" });
   } else if (played.type === "artifact") {
     player.artifacts.push(played);
     triggerQuest(playerIndex, "artifact", 1, played);
@@ -355,6 +371,7 @@ function summonMinion(playerIndex, minion, target = null) {
   }
   minion.canAttack = minion.stats.speed >= 2 || minion.tags.includes("swift");
   player.board.push(minion);
+  emitVisualEvent("summon", { label: minion.name, detail: minion.tags.includes("guard") ? "守護登場" : "召喚登場", tone: minion.faction });
   triggerQuest(playerIndex, "summon", 1, minion);
   if (minion.tags.includes("dragon")) triggerQuest(playerIndex, "dragonSummon", 1, minion);
   if (minion.tags.includes("guard") || minion.tags.includes("ward") || minion.shield) triggerQuest(playerIndex, "guardOrWardSummon", 1, minion);
@@ -491,18 +508,25 @@ function healTarget(playerIndex, target, amount) {
   const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
   if (!minion) return;
   minion.currentHealth = Math.min(minion.stats.health, minion.currentHealth + amount);
+  emitVisualEvent("heal", { label: `+${amount}`, detail: minion.name, tone: "heal" });
   triggerQuest(target.ownerIndex, "heal", amount);
 }
 
 function gainShield(target) {
   if (!target || target.type !== "minion") return;
   const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
-  if (minion) minion.shield = true;
+  if (minion) {
+    minion.shield = true;
+    emitVisualEvent("shield", { label: "護盾", detail: minion.name, tone: "shield" });
+  }
 }
 
 function gainShieldBestAlly(playerIndex) {
   const minion = [...state.players[playerIndex].board].sort((a, b) => b.currentAttack + b.currentHealth - (a.currentAttack + a.currentHealth))[0];
-  if (minion) minion.shield = true;
+  if (minion) {
+    minion.shield = true;
+    emitVisualEvent("shield", { label: "護盾", detail: minion.name, tone: "shield" });
+  }
 }
 
 function drawThenDiscard(playerIndex, amount) {
@@ -567,6 +591,7 @@ function consumeSpellShield(sourcePlayerIndex, targetPlayerIndex, amount, source
       const targetMinion = targetPlayer.board.find((item) => item.uid === state.lastSpellTargetUid);
       if (targetMinion) {
         targetMinion.shield = true;
+        emitVisualEvent("secretTrigger", { label: wardSecret.name, detail: "賦予護盾", tone: "secret" });
         log(`${targetPlayer.kind}的 ${wardSecret.name} 賦予了護盾。`);
       }
     }
@@ -575,6 +600,7 @@ function consumeSpellShield(sourcePlayerIndex, targetPlayerIndex, amount, source
   if (shield && sourcePlayerIndex !== targetPlayerIndex && source.type === "spell") {
     targetPlayer.secrets = targetPlayer.secrets.filter((item) => item.uid !== shield.uid);
     drawCards(targetPlayerIndex, 1);
+    emitVisualEvent("secretTrigger", { label: shield.name, detail: "抵銷法術傷害", tone: "secret" });
     log(`${targetPlayer.kind}的 ${shield.name} 抵銷了傷害。`);
     return Math.max(0, amount - 2);
   }
@@ -615,11 +641,13 @@ function triggerSummonSecrets(playerIndex, summoned) {
   if (!snare) return;
   opponent.secrets = opponent.secrets.filter((item) => item.uid !== snare.uid);
   silenceMinion({ type: "minion", ownerIndex: playerIndex, uid: summoned.uid });
+  emitVisualEvent("secretTrigger", { label: snare.name, detail: summoned.name, tone: "secret" });
   log(`${opponent.kind}的 ${snare.name} 拘束了 ${summoned.name}。`);
 }
 
 function damageHero(playerIndex, amount, sourcePlayerIndex = null) {
   state.players[playerIndex].hp -= amount;
+  if (amount > 0) emitVisualEvent("damage", { label: `-${amount}`, detail: playerIndex === 0 ? "我方英雄" : "敵方英雄", tone: "damage" });
   if (typeof sourcePlayerIndex === "number" && sourcePlayerIndex !== playerIndex && amount > 0) {
     triggerQuest(sourcePlayerIndex, "heroDamage", amount);
   }
@@ -628,6 +656,7 @@ function damageHero(playerIndex, amount, sourcePlayerIndex = null) {
 
 function healHero(playerIndex, amount) {
   state.players[playerIndex].hp = Math.min(30, state.players[playerIndex].hp + amount);
+  emitVisualEvent("heal", { label: `+${amount}`, detail: playerIndex === 0 ? "我方英雄" : "敵方英雄", tone: "heal" });
   triggerQuest(playerIndex, "heal", amount);
 }
 
@@ -637,10 +666,12 @@ function damageMinion(ownerIndex, uidToDamage, amount, source = null) {
   if (!minion) return;
   if (minion.shield && amount > 0) {
     minion.shield = false;
+    emitVisualEvent("shieldBreak", { label: "護盾抵銷", detail: minion.name, tone: "shield" });
     log(`${minion.name} 的護盾抵銷了傷害。`);
     return;
   }
   minion.currentHealth -= amount;
+  if (amount > 0) emitVisualEvent("damage", { label: `-${amount}`, detail: minion.name, tone: "damage" });
   if (minion.currentHealth <= 0) killMinion(ownerIndex, minion.uid, source);
 }
 
@@ -683,6 +714,7 @@ function summonToken(playerIndex, tokenId) {
   const token = cloneCard(TOKENS[tokenId]);
   token.canAttack = false;
   player.board.push(token);
+  emitVisualEvent("summon", { label: token.name, detail: "衍生物登場", tone: token.faction });
   triggerQuest(playerIndex, "summon", 1, token);
   if (token.tags.includes("dragon")) triggerQuest(playerIndex, "dragonSummon", 1, token);
   if (token.tags.includes("guard") || token.tags.includes("ward") || token.shield) triggerQuest(playerIndex, "guardOrWardSummon", 1, token);
@@ -809,6 +841,7 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
   const flameCounter = !targetUid ? opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "flameCounter")) : null;
   if (flameCounter) {
     opponent.secrets = opponent.secrets.filter((item) => item.uid !== flameCounter.uid);
+    emitVisualEvent("secretTrigger", { label: flameCounter.name, detail: "反擊攻擊者", tone: "secret" });
     damageMinion(playerIndex, attacker.uid, 3, flameCounter);
     log(`${opponent.kind}的 ${flameCounter.name} 反擊了攻擊者。`);
     if (!player.board.some((item) => item.uid === attacker.uid)) return;
@@ -817,6 +850,7 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
   const ambush = opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "ambushGuard"));
   if (ambush) {
     opponent.secrets = opponent.secrets.filter((item) => item.uid !== ambush.uid);
+    emitVisualEvent("secretTrigger", { label: ambush.name, detail: "召喚伏兵", tone: "secret" });
     summonToken(1 - playerIndex, "fawn");
     const guardToken = opponent.board[opponent.board.length - 1];
     if (guardToken) {
@@ -829,6 +863,7 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
   const redirect = opponent.secrets.find((secret) => secret.effects.some((effect) => effect.type === "redirectAttack"));
   if (redirect) {
     opponent.secrets = opponent.secrets.filter((item) => item.uid !== redirect.uid);
+    emitVisualEvent("secretTrigger", { label: redirect.name, detail: "轉移攻擊", tone: "secret" });
     summonToken(1 - playerIndex, "wraith");
     const wraith = opponent.board[opponent.board.length - 1];
     targetUid = wraith?.uid ?? targetUid;
@@ -843,6 +878,7 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
   const totalAttack = attacker.currentAttack + bonus;
   attacker.attackedThisTurn = true;
   attacker.canAttack = false;
+  emitVisualEvent("attack", { label: attacker.name, detail: targetUid ? "攻擊召喚物" : "攻擊英雄", tone: "damage" });
 
   if (targetUid) {
     const target = opponent.board.find((item) => item.uid === targetUid);
@@ -994,6 +1030,7 @@ function chooseEvolution(playerIndex, cardId) {
   const newCard = cloneCard(selected);
   if (selected.immediate && player.hand.length < 10) player.hand.push(newCard);
   else player.deck.splice(Math.floor(rng() * (player.deck.length + 1)), 0, newCard);
+  emitVisualEvent("evolution", { label: selected.name, detail: selected.immediate ? "加入手牌" : "洗入牌組", tone: selected.faction });
   log(`${player.kind}選擇進化：${selected.name}。`);
   state.waitingForEvolution = false;
   if (!state.simulating) els.evoModal.classList.add("hidden");
@@ -1188,6 +1225,121 @@ function log(message) {
   state.logs = state.logs.slice(0, 80);
 }
 
+function emitVisualEvent(type, payload = {}) {
+  if (!hasDom || !state || state.simulating) return;
+  const event = { type, payload, id: `v${Date.now()}-${visualQueue.length}` };
+  state.visualQueue?.push(event);
+  visualQueue.push(event);
+  state.visualQueue = visualQueue;
+  processVisualQueue();
+}
+
+function processVisualQueue() {
+  if (visualBusy || !els.visualOverlay) return;
+  const event = visualQueue.shift();
+  if (state) state.visualQueue = visualQueue;
+  if (!event) return;
+  visualBusy = true;
+  renderActionHint(eventHint(event));
+  if (currentAnimationDuration() === 0) {
+    visualBusy = false;
+    if (!visualQueue.length) renderActionHint();
+    processVisualQueue();
+    return;
+  }
+  const node = buildVisualNode(event);
+  els.visualOverlay.append(node);
+  window.setTimeout(() => {
+    node.remove();
+    visualBusy = false;
+    if (!visualQueue.length) renderActionHint();
+    processVisualQueue();
+  }, currentAnimationDuration());
+}
+
+function buildVisualNode(event) {
+  const node = document.createElement("div");
+  const tone = event.payload.tone ?? event.type;
+  node.className = `visual-event ${event.type} tone-${tone}`;
+  node.innerHTML = `
+    ${effectImage(event)}
+    <strong>${event.payload.label ?? eventLabel(event.type)}</strong>
+    <span>${event.payload.detail ?? ""}</span>
+    ${event.type === "attack" ? `<i class="attack-streak"></i>` : ""}
+  `;
+  return node;
+}
+
+function effectImage(event) {
+  const effectKey = {
+    damage: "damage",
+    heal: "heal",
+    shield: "shieldBreak",
+    shieldBreak: "shieldBreak",
+    secretTrigger: "secret",
+    evolution: "evolution",
+    summon: "evolution",
+    playCard: "evolution",
+    attack: "damage",
+  }[event.type] ?? "evolution";
+  return `<img src="${ART_MANIFEST.effects[effectKey]}" alt="" />`;
+}
+
+function eventLabel(type) {
+  const labels = {
+    attack: "進攻",
+    damage: "傷害",
+    heal: "治療",
+    playCard: "出牌",
+    secretTrigger: "秘儀觸發",
+    shield: "護盾",
+    shieldBreak: "護盾破裂",
+    summon: "召喚",
+    evolution: "進化突破",
+  };
+  return labels[type] ?? "戰況";
+}
+
+function eventHint(event) {
+  return event.payload.hint ?? event.payload.label ?? eventLabel(event.type);
+}
+
+function renderActionHint(text = null) {
+  if (!els.actionHint) return;
+  els.actionHint.textContent = text ?? currentActionHint();
+}
+
+function currentActionHint() {
+  if (!state) return "準備遠征";
+  if (state.waitingForEvolution) return "進化突破：選擇一張牌";
+  if (state.pendingAction?.type === "attackTarget") return "選擇攻擊目標";
+  if (state.pendingAction?.type === "heroPowerTarget") return "選擇召喚師技能目標";
+  if (state.pendingAction?.type === "cardTarget") return "選擇卡牌目標";
+  if (state.gameOver) return "對局結束";
+  return state.active === 0 ? "你的回合：出牌、攻擊或結束回合" : "對手行動中";
+}
+
+function currentAnimationDuration() {
+  return ANIMATION_SETTINGS.durations[animationSpeed] ?? ANIMATION_SETTINGS.durations.normal;
+}
+
+function loadAnimationSpeed() {
+  if (!hasDom) return "normal";
+  const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const stored = localStorage.getItem(ANIMATION_SETTINGS.storageKey);
+  if (["normal", "fast", "off"].includes(stored)) return stored;
+  return reduced ? "fast" : "normal";
+}
+
+function setAnimationSpeed(value) {
+  animationSpeed = ["normal", "fast", "off"].includes(value) ? value : "normal";
+  if (hasDom) {
+    localStorage.setItem(ANIMATION_SETTINGS.storageKey, animationSpeed);
+    document.documentElement.dataset.animationSpeed = animationSpeed;
+    if (els.animationSpeed) els.animationSpeed.value = animationSpeed;
+  }
+}
+
 function runBalanceSimulation(gameCount = 50) {
   const summary = runHeadlessSimulation(gameCount, { seed: 405 });
   renderBalanceSummary(summary);
@@ -1227,6 +1379,7 @@ export function simulateGame(firstSummonerId, secondSummonerId, options = {}) {
     gameOver: false,
     waitingForEvolution: false,
     pendingAction: null,
+    visualQueue: [],
     simulating: true,
   };
   drawCards(0, 4);
@@ -1319,6 +1472,7 @@ function render() {
   renderArtifacts(els.opponentArtifacts, opponent);
   renderHand();
   renderMetrics();
+  renderActionHint();
   els.log.innerHTML = state.logs.map((item) => `<div>${item}</div>`).join("");
   els.endTurn.disabled = state.active !== 0 || state.waitingForEvolution || state.pendingAction || state.gameOver;
 }
@@ -1841,6 +1995,8 @@ function renderSummoners() {
 }
 
 function initBrowserGame() {
+  setAnimationSpeed(loadAnimationSpeed());
+  els.animationSpeed.addEventListener("change", () => setAnimationSpeed(els.animationSpeed.value));
   els.endTurn.addEventListener("click", endTurn);
   els.newGame.addEventListener("click", () => location.reload());
   els.simulate.addEventListener("click", () => runBalanceSimulation(50));

@@ -187,12 +187,19 @@ function validateArtManifest(errors) {
   for (const assetPath of collectArtPaths()) {
     if (!existsSync(resolveAsset(assetPath))) errors.push(`美術資產不存在: ${assetPath}`);
   }
+  const representativeCards = [...BASE_CARDS, ...EVOLUTION_CARDS].filter((card) => card.art?.image);
+  if (representativeCards.length !== 15) errors.push(`代表卡專屬 art 必須為 15 張，目前 ${representativeCards.length}`);
+  for (const card of representativeCards) {
+    if (!existsSync(resolveAsset(card.art.image))) errors.push(`${card.id} 專屬 art 不存在: ${card.art.image}`);
+  }
 }
 
 function collectArtPaths() {
   const paths = new Set([
     ART_MANIFEST.cardBack,
+    ...Object.values(ART_MANIFEST.effects),
     ...Object.values(ART_MANIFEST.fallbackCards),
+    ...Object.values(ART_MANIFEST.cardArt),
     ...Object.values(ART_MANIFEST.icons.types),
     ...Object.values(ART_MANIFEST.icons.keywords),
     ...Object.values(ART_MANIFEST.icons.rarities),

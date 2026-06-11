@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="護盾破裂演出">
+  <path d="M90 12l60 32v48c0 40-25 64-60 82-35-18-60-42-60-82V44z" fill="#7dd3fc" opacity=".42"/>
+  <path d="M90 12v162M38 70l52 24 52-24M52 130l38-36 38 36" stroke="#f8fafc" stroke-width="9" fill="none"/>
+  <path d="M116 30L76 90h34l-46 60" stroke="#fb7185" stroke-width="10" fill="none"/>
+</svg>

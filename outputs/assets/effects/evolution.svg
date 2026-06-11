@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="進化演出">
+  <path d="M90 10l22 56 60 4-46 38 14 58-50-32-50 32 14-58L8 70l60-4z" fill="#ffd166"/>
+  <circle cx="90" cy="90" r="54" fill="none" stroke="#7dd3fc" stroke-width="9"/>
+  <path d="M90 44v92M44 90h92" stroke="#111936" stroke-width="10"/>
+</svg>

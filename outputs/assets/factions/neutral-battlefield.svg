@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="中立遠征者戰場">
+  <rect width="1280" height="720" fill="#172033"/>
+  <path d="M0 520c250-100 430-80 640 0s390 100 640 0v200H0z" fill="#202b42"/>
+  <path d="M640 130l80 190 200 80-200 80-80 190-80-190-200-80 200-80z" fill="#7dd3fc" opacity=".22"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="龍焰王庭戰場">
+  <rect width="1280" height="720" fill="#250f13"/>
+  <path d="M0 560c220-140 420-110 640-10s420 120 640-20v190H0z" fill="#42151a"/>
+  <path d="M120 360c220-220 430-260 620-120 140 100 260 110 420 20" fill="none" stroke="#fb7185" stroke-width="28" opacity=".4"/>
+  <path d="M640 90l64 142 154 18-112 108 30 152-136-74-136 74 30-152-112-108 154-18z" fill="#ffd166" opacity=".22"/>
+</svg>

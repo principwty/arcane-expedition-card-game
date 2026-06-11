@@ -10,12 +10,14 @@ Run a local static server:
 python3 -m http.server 4181 --directory outputs
 ```
 
-Then visit `http://127.0.0.1:4181/`. V0.7 uses ES modules, so local server play is the supported path.
+Then visit `http://127.0.0.1:4181/`. V0.8 uses ES modules, so local server play is the supported path.
 
-## V0.7 Features
+## V0.8 Features
 
 - Five factions with distinct card identities.
 - 72 base cards and 37 evolution cards.
+- Mixed art system with faction themes, summoner portraits, battlefield art, card fallback art, type icons, keyword icons, and rarity marks.
+- Combat UI readability pass for card art windows, legal targets, selected attackers, hero portraits, faction emblems, and evolution card types.
 - Two quest lines and two deck archetype templates per summoner.
 - Collection and deck builder demo with all cards unlocked.
 - Local deck saving through `localStorage`.
@@ -27,8 +29,16 @@ Then visit `http://127.0.0.1:4181/`. V0.7 uses ES modules, so local server play 
 - Deeper secrets and automatic counterplay triggers.
 - Improved AI for play, attack, and evolution decisions.
 - ES module card data in `outputs/src/data.js`, reused by browser and Node scripts.
-- Card, quest, archetype, and default deck validation plus deterministic AI-vs-AI simulation scripts.
+- Card, quest, archetype, default deck, and art manifest validation plus deterministic AI-vs-AI simulation scripts.
 - Balance simulation panel now reports empty-hand rate and board-attack snowball pressure.
+
+## Art Pipeline
+
+- Faction themes live in `outputs/src/data.js` as `FACTION_THEMES`.
+- Asset paths are centralized in `ART_MANIFEST`; `npm run check` verifies every manifest path exists.
+- Assets are organized under `outputs/assets/summoners`, `outputs/assets/factions`, `outputs/assets/icons`, and `outputs/assets/textures`.
+- Cards may optionally define `art: { image, focus, fallback }`; cards without custom art use faction fallback art.
+- New icons should be SVG and use descriptive names such as `type-spell.svg`, `keyword-guard.svg`, or `rarity-evolution.svg`.
 
 ## Validation
 

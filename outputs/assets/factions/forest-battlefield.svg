@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="古林契約戰場">
+  <rect width="1280" height="720" fill="#0f2118"/>
+  <path d="M0 500c210-80 380-80 590 0s430 86 690-14v234H0z" fill="#163523"/>
+  <g fill="#86efac" opacity=".22"><circle cx="230" cy="280" r="150"/><circle cx="980" cy="240" r="190"/><circle cx="640" cy="110" r="120"/></g>
+  <g stroke="#facc15" stroke-width="6" opacity=".35"><path d="M160 560c120-150 180-270 210-430"/><path d="M1080 560c-90-170-160-290-220-430"/></g>
+</svg>

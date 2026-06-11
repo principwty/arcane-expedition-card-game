@@ -1,8 +1,10 @@
 import {
+  ART_MANIFEST,
   BASE_CARDS,
   DECK_ARCHETYPES,
   DEFAULT_DECK_RECIPES,
   EVOLUTION_CARDS,
+  FACTION_THEMES,
   FACTION_LABELS,
   QUEST_LINES,
   SUMMONERS,
@@ -10,6 +12,9 @@ import {
   TYPE_LABELS,
 } from "../outputs/src/data.js";
 import { validateDeckRecipe } from "../outputs/src/deck-utils.js";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const SUPPORTED_EFFECTS = new Set([
   "ambushGuard",
@@ -72,6 +77,7 @@ const TYPES = new Set(Object.keys(TYPE_LABELS));
 const RARITIES = new Set(["common", "rare", "token", "強化", "發現", "覺醒"]);
 const QUEST_TRIGGERS = new Set(["artifact", "death", "dragonSummon", "guardOrWardSummon", "heal", "heroDamage", "secretOrSilence", "spell", "summon", "undeadSummon"]);
 const QUEST_REWARD_TYPES = new Set(["buffAll", "damageHero", "draw", "shield", "summonToken"]);
+const OUTPUTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../outputs");
 
 export function validateCards() {
   const errors = [];
@@ -155,7 +161,53 @@ export function validateCards() {
     if (quest && quest.summonerId !== archetype.summonerId) errors.push(`${archetype.name} 指定跨職業任務 ${quest.name}`);
   }
 
-  return { ok: errors.length === 0, errors, counts: { base: BASE_CARDS.length, evolution: EVOLUTION_CARDS.length, tokens: Object.keys(TOKENS).length, decks: Object.keys(DEFAULT_DECK_RECIPES).length, quests: QUEST_LINES.length, archetypes: DECK_ARCHETYPES.length } };
+  validateArtManifest(errors);
+
+  return { ok: errors.length === 0, errors, counts: { base: BASE_CARDS.length, evolution: EVOLUTION_CARDS.length, tokens: Object.keys(TOKENS).length, decks: Object.keys(DEFAULT_DECK_RECIPES).length, quests: QUEST_LINES.length, archetypes: DECK_ARCHETYPES.length, artAssets: collectArtPaths().length } };
+}
+
+function validateArtManifest(errors) {
+  for (const faction of Object.keys(FACTION_LABELS)) {
+    const theme = FACTION_THEMES[faction];
+    if (!theme) {
+      errors.push(`${faction} 缺少 FACTION_THEMES`);
+      continue;
+    }
+    for (const key of ["primary", "accent", "surface", "summonerPortrait", "battlefieldArt", "cardBackArt", "emblem"]) {
+      if (!theme[key]) errors.push(`${faction} theme 缺少 ${key}`);
+    }
+    if (!ART_MANIFEST.fallbackCards[faction]) errors.push(`${faction} 缺少 fallback card art`);
+  }
+  for (const type of Object.keys(TYPE_LABELS)) {
+    if (!ART_MANIFEST.icons.types[type]) errors.push(`${type} 缺少 type icon`);
+  }
+  for (const tag of ["guard", "swift", "ward", "lifesteal", "overwhelm"]) {
+    if (!ART_MANIFEST.icons.keywords[tag]) errors.push(`${tag} 缺少 keyword icon`);
+  }
+  for (const assetPath of collectArtPaths()) {
+    if (!existsSync(resolveAsset(assetPath))) errors.push(`美術資產不存在: ${assetPath}`);
+  }
+}
+
+function collectArtPaths() {
+  const paths = new Set([
+    ART_MANIFEST.cardBack,
+    ...Object.values(ART_MANIFEST.fallbackCards),
+    ...Object.values(ART_MANIFEST.icons.types),
+    ...Object.values(ART_MANIFEST.icons.keywords),
+    ...Object.values(ART_MANIFEST.icons.rarities),
+  ]);
+  for (const theme of Object.values(FACTION_THEMES)) {
+    paths.add(theme.summonerPortrait);
+    paths.add(theme.battlefieldArt);
+    paths.add(theme.cardBackArt);
+    paths.add(theme.emblem);
+  }
+  return [...paths].filter(Boolean);
+}
+
+function resolveAsset(assetPath) {
+  return resolve(OUTPUTS_DIR, assetPath.replace(/^\.\//, ""));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -164,5 +216,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error(result.errors.map((error) => `- ${error}`).join("\n"));
     process.exit(1);
   }
-  console.log(`Card validation passed: ${result.counts.base} base, ${result.counts.evolution} evolution, ${result.counts.tokens} tokens, ${result.counts.decks} default decks, ${result.counts.quests} quests, ${result.counts.archetypes} archetypes.`);
+  console.log(`Card validation passed: ${result.counts.base} base, ${result.counts.evolution} evolution, ${result.counts.tokens} tokens, ${result.counts.decks} default decks, ${result.counts.quests} quests, ${result.counts.archetypes} archetypes, ${result.counts.artAssets} art assets.`);
 }

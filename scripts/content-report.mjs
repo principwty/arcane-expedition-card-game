@@ -12,7 +12,8 @@ const validation = validateCards();
 console.log("# Arcane Expedition Content Report\n");
 console.log(`Validation: ${validation.ok ? "passed" : "failed"}`);
 console.log(`Base cards: ${BASE_CARDS.length}`);
-console.log(`Evolution cards: ${EVOLUTION_CARDS.length}\n`);
+console.log(`Evolution cards: ${EVOLUTION_CARDS.length}`);
+console.log(`Art assets: ${validation.counts.artAssets}\n`);
 
 console.log("## Faction Curves");
 for (const faction of factions) {

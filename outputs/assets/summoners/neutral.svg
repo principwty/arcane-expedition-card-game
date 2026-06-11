@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 420" role="img" aria-label="中立遠征者">
+  <rect width="320" height="420" fill="#172033"/>
+  <path d="M74 306c34-72 138-72 172 0v72H74z" fill="#263149"/>
+  <circle cx="160" cy="142" r="78" fill="#aab4c8" opacity=".25"/>
+  <path d="M160 62l28 72 72 28-72 28-28 72-28-72-72-28 72-28z" fill="#7dd3fc"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 336" role="img" aria-label="奧術遠征卡背">
+  <rect width="240" height="336" rx="18" fill="#0b1020"/>
+  <rect x="14" y="14" width="212" height="308" rx="14" fill="#172033" stroke="#ffd166" stroke-width="4"/>
+  <path d="M120 54l30 78 78 30-78 30-30 78-30-78-78-30 78-30z" fill="#7dd3fc" opacity=".5"/>
+  <circle cx="120" cy="168" r="52" fill="none" stroke="#c084fc" stroke-width="8"/>
+</svg>

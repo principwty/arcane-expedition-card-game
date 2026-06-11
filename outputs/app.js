@@ -1,4 +1,5 @@
 import {
+  ART_MANIFEST,
   BASE_CARDS,
   COIN_CARD,
   DECK_RULES,
@@ -6,6 +7,7 @@ import {
   DECK_ARCHETYPES,
   EVOLUTION_CARDS,
   EVOLUTION_THRESHOLDS,
+  FACTION_THEMES,
   FACTION_LABELS,
   KEYWORD_LABELS,
   QUEST_LINES,
@@ -973,7 +975,8 @@ function showEvolutionChoices(choices) {
   els.evoChoices.innerHTML = "";
   for (const choice of choices) {
     const button = document.createElement("button");
-    button.className = "card evolution";
+    button.className = `card evolution ${evolutionClass(choice)}`;
+    button.setAttribute("style", cardVisualStyle(choice));
     button.innerHTML = cardMarkup(choice);
     button.addEventListener("click", () => chooseEvolution(0, choice.id));
     els.evoChoices.append(button);
@@ -1306,6 +1309,7 @@ function average(values) {
 function render() {
   if (!state || state.simulating) return;
   const [player, opponent] = state.players;
+  applyArenaTheme(player, opponent);
   els.matchTitle.textContent = `${FACTION_LABELS[player.summoner.faction]} 對 ${FACTION_LABELS[opponent.summoner.faction]}`;
   renderPlayerArea(els.playerArea, player);
   renderPlayerArea(els.opponentArea, opponent, true);
@@ -1326,8 +1330,11 @@ function renderPlayerArea(container, player, isOpponent = false) {
   const powerDisabled = ownerIndex !== 0 || !canUseHeroPower(ownerIndex);
   const quest = QUEST_LINES.find((item) => item.id === player.questId);
   const awakened = player.awakenedPowers.length ? `<div class="awakened">覺醒：${player.awakenedPowers.map((mode) => FACTION_LABELS[mode]).join("、")}</div>` : "";
+  const theme = themeFor(player.summoner.faction);
+  container.setAttribute("style", `--card-primary:${theme.primary};--card-accent:${theme.accent};--card-surface:${theme.surface};`);
   container.innerHTML = `
     <button class="hero-panel ${heroTargetClass}" type="button">
+      <img class="hero-portrait" src="${theme.summonerPortrait}" alt="" />
       <strong>${player.summoner.name}</strong>
       <div class="eyebrow">${FACTION_LABELS[player.summoner.faction]}</div>
       <span>${isOpponent ? "敵方英雄" : "我方英雄"}</span>
@@ -1358,6 +1365,7 @@ function renderBoard(container, player, ownerIndex) {
   for (const minion of player.board) {
     const node = document.createElement("button");
     node.className = `card board-card minion ${getMinionClasses(ownerIndex, minion)}`;
+    node.setAttribute("style", cardVisualStyle(minion));
     node.innerHTML = boardMarkup(minion);
     if (isPendingMinionTarget(ownerIndex, minion)) {
       node.addEventListener("click", () => selectTarget({ type: "minion", ownerIndex, uid: minion.uid }));
@@ -1378,6 +1386,7 @@ function renderArtifacts(container, player) {
   for (const artifact of player.artifacts) {
     const node = document.createElement("div");
     node.className = "card artifact";
+    node.setAttribute("style", cardVisualStyle(artifact));
     node.innerHTML = cardMarkup(artifact);
     container.append(node);
   }
@@ -1391,6 +1400,7 @@ function renderHand() {
     const playable = state.active === 0 && !state.waitingForEvolution && !state.pendingAction && handCard.cost <= state.players[0].mana && hasTarget;
     const node = document.createElement("button");
     node.className = `card ${handCard.type} ${playable ? "playable" : "disabled"}`;
+    node.setAttribute("style", cardVisualStyle(handCard));
     node.innerHTML = cardMarkup(handCard);
     node.disabled = !playable;
     node.addEventListener("click", () => playCard(0, handCard.uid));
@@ -1455,10 +1465,18 @@ function getMinionClasses(ownerIndex, minion) {
 function cardMarkup(item) {
   const stats = item.stats ? `<div class="stats"><span>攻 ${item.stats.attack}</span><span>速 ${item.stats.speed}</span><span>命 ${item.stats.health}</span></div>` : "";
   const keywords = keywordMarkup(item.tags);
+  const typeIcon = ART_MANIFEST.icons.types[item.type];
+  const rarityIcon = item.evolutionTier ? ART_MANIFEST.icons.rarities.evolution : ART_MANIFEST.icons.rarities[item.rarity] ?? ART_MANIFEST.icons.rarities.common;
+  const art = resolveCardArt(item);
+  const theme = themeFor(item.faction);
   return `
+    <div class="card-art" style="background-image: linear-gradient(180deg, rgba(11, 16, 32, .04), rgba(11, 16, 32, .72)), url('${art.image}'); background-position: ${art.focus};">
+      <img class="faction-emblem" src="${theme.emblem}" alt="" />
+      <img class="rarity-mark" src="${rarityIcon}" alt="" />
+    </div>
     <div class="cost">${item.cost}</div>
     <h4>${item.name}</h4>
-    <div class="type">${TYPE_LABELS[item.type]} · ${FACTION_LABELS[item.faction] ?? item.faction} · ${item.rarity}</div>
+    <div class="type"><img src="${typeIcon}" alt="" />${TYPE_LABELS[item.type]} · ${FACTION_LABELS[item.faction] ?? item.faction} · ${item.rarity}</div>
     ${keywords}
     <div class="text">${item.text}</div>
     ${stats}
@@ -1466,7 +1484,9 @@ function cardMarkup(item) {
 }
 
 function boardMarkup(item) {
+  const theme = themeFor(item.faction);
   return `
+    <img class="board-emblem" src="${theme.emblem}" alt="" />
     <h4>${item.name}</h4>
     ${keywordMarkup(item.tags, item.shield)}
     <div class="text">${item.text}</div>
@@ -1475,10 +1495,11 @@ function boardMarkup(item) {
 }
 
 function keywordMarkup(tags = [], shield = false) {
-  const keywords = tags.filter((tag) => KEYWORD_LABELS[tag]).map((tag) => KEYWORD_LABELS[tag]);
-  if (shield && !keywords.includes("護盾")) keywords.push("護盾");
+  const keywordTags = tags.filter((tag) => KEYWORD_LABELS[tag]);
+  if (shield && !keywordTags.includes("ward")) keywordTags.push("ward");
+  const keywords = keywordTags.map((tag) => ({ tag, label: KEYWORD_LABELS[tag] }));
   if (!keywords.length) return "";
-  return `<div class="keywords">${keywords.map((word) => `<span title="${keywordHelp(word)}">${word}</span>`).join("")}</div>`;
+  return `<div class="keywords">${keywords.map(({ tag, label }) => `<span title="${keywordHelp(label)}"><img src="${ART_MANIFEST.icons.keywords[tag]}" alt="" />${label}</span>`).join("")}</div>`;
 }
 
 function keywordHelp(word) {
@@ -1490,6 +1511,38 @@ function keywordHelp(word) {
     "踐踏": "攻擊召喚物時，溢出傷害會打到敵方英雄。",
   };
   return help[word] ?? word;
+}
+
+function themeFor(faction) {
+  return FACTION_THEMES[faction] ?? FACTION_THEMES.neutral;
+}
+
+function resolveCardArt(item) {
+  const fallback = item.art?.fallback ?? item.faction;
+  return {
+    image: item.art?.image ?? ART_MANIFEST.fallbackCards[fallback] ?? ART_MANIFEST.fallbackCards.neutral,
+    focus: item.art?.focus ?? "center",
+  };
+}
+
+function cardVisualStyle(item) {
+  const theme = themeFor(item.faction);
+  return `--card-primary:${theme.primary};--card-accent:${theme.accent};--card-surface:${theme.surface};`;
+}
+
+function applyArenaTheme(player, opponent) {
+  const playerTheme = themeFor(player.summoner.faction);
+  const opponentTheme = themeFor(opponent.summoner.faction);
+  els.game.style.setProperty("--player-primary", playerTheme.primary);
+  els.game.style.setProperty("--player-accent", playerTheme.accent);
+  els.game.style.setProperty("--opponent-primary", opponentTheme.primary);
+  els.game.style.setProperty("--arena-art", `url("${playerTheme.battlefieldArt}")`);
+}
+
+function evolutionClass(card) {
+  if (card.rarity === "覺醒") return "evo-awaken";
+  if (card.rarity === "發現") return "evo-discover";
+  return "evo-upgrade";
 }
 
 function loadDecks() {
@@ -1707,6 +1760,7 @@ function renderCardPool() {
     const count = counts.get(card.id) ?? 0;
     const node = document.createElement("article");
     node.className = "card builder-card";
+    node.setAttribute("style", cardVisualStyle(card));
     node.innerHTML = `
       ${cardMarkup(card)}
       <div class="builder-card-actions">
@@ -1761,13 +1815,18 @@ function renderSummoners() {
   els.summonerGrid.innerHTML = "";
   for (const summoner of SUMMONERS) {
     const archetypes = archetypesForSummoner(summoner.id);
+    const theme = themeFor(summoner.faction);
     const node = document.createElement("article");
     node.className = "summoner-card";
+    node.setAttribute("style", `--card-primary:${theme.primary};--card-accent:${theme.accent};--card-surface:${theme.surface};--summoner-art:url('${theme.summonerPortrait}');--summoner-bg:url('${theme.battlefieldArt}');`);
     node.innerHTML = `
+      <div class="summoner-visual">
+        <img src="${theme.summonerPortrait}" alt="" />
+      </div>
       <div class="faction">${FACTION_LABELS[summoner.faction]}</div>
       <h2>${summoner.name}</h2>
       <p>${summoner.style}</p>
-      <p><strong>打法</strong><br>${archetypes.map((item) => item.name.replace("模板", "")).join(" / ")}</p>
+      <div class="summoner-tags">${archetypes.map((item) => `<span>${item.name.replace("模板", "")}</span>`).join("")}</div>
       <p><strong>召喚師能力</strong><br>${summoner.ability}</p>
       <div class="summoner-actions">
         <button class="button primary" type="button">快速開局</button>

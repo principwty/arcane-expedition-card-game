@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="墓月教團戰場">
+  <rect width="1280" height="720" fill="#171124"/>
+  <path d="M0 540c180-70 310-68 500 0s410 72 780-20v200H0z" fill="#231733"/>
+  <path d="M760 80a128 128 0 1 0 0 256 96 96 0 1 1 0-256z" fill="#c084fc" opacity=".45"/>
+  <g fill="#94a3b8" opacity=".55"><circle cx="190" cy="160" r="4"/><circle cx="350" cy="280" r="3"/><circle cx="1060" cy="210" r="5"/><circle cx="910" cy="390" r="3"/></g>
+  <g stroke="#c084fc" stroke-width="5" opacity=".22"><path d="M220 590c90-110 160-170 250-210"/><path d="M880 620c-70-130-130-210-230-270"/></g>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="星穹學派戰場">
+  <rect width="1280" height="720" fill="#0b1020"/>
+  <path d="M0 520c240-90 420-80 640 0s400 90 640 0v200H0z" fill="#111936"/>
+  <g stroke="#7dd3fc" stroke-width="2" opacity=".35"><path d="M120 160l220 90 300-170 300 220 220-120"/><path d="M220 460l280-240 220 220 300-270"/></g>
+  <g fill="#f8fafc" opacity=".85"><circle cx="180" cy="120" r="4"/><circle cx="340" cy="250" r="3"/><circle cx="640" cy="82" r="5"/><circle cx="940" cy="300" r="4"/><circle cx="1120" cy="180" r="3"/></g>
+  <circle cx="640" cy="360" r="150" fill="none" stroke="#c084fc" stroke-width="12" opacity=".18"/>
+</svg>

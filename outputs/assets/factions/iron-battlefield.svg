@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="鐵誓遠征軍戰場">
+  <rect width="1280" height="720" fill="#111827"/>
+  <path d="M0 510h1280v210H0z" fill="#1f2937"/>
+  <g stroke="#f8fafc" stroke-width="5" opacity=".18"><path d="M0 510h1280M160 360h960M260 240h760"/><path d="M260 240v270M520 180v330M760 180v330M1020 240v270"/></g>
+  <path d="M640 90l160 94v180c0 110-70 194-160 244-90-50-160-134-160-244V184z" fill="#ffd166" opacity=".18"/>
+</svg>

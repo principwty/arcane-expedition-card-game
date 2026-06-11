@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 420" role="img" aria-label="墓月教團召喚師彌莎">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#c084fc"/><stop offset="1" stop-color="#94a3b8"/></linearGradient></defs>
+  <rect width="320" height="420" fill="#1b1428"/>
+  <path d="M190 58a70 70 0 1 0 0 140 54 54 0 1 1 0-140z" fill="url(#g)"/>
+  <path d="M82 350c28-88 128-108 156 0v42H82z" fill="#261a38"/>
+  <path d="M116 232c20 28 68 28 88 0" stroke="#c084fc" stroke-width="10" fill="none"/>
+  <g fill="#94a3b8" opacity=".7"><circle cx="88" cy="86" r="4"/><circle cx="236" cy="248" r="5"/><circle cx="72" cy="242" r="3"/></g>
+</svg>

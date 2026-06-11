@@ -1,9 +1,9 @@
 export function card(id, name, cost, type, faction, rarity, stats, text, tags, effects) {
-  return { id, name, cost, type, faction, rarity, stats, text, tags, effects, evolutionTier: 0 };
+  return { id, name, cost, type, faction, rarity, stats, text, tags, effects, evolutionTier: 0, art: null };
 }
 
 export function evo(id, name, cost, type, faction, rarity, text, effects, immediate = false, stats = null, tags = []) {
-  return { id, name, cost, type, faction, rarity, stats, text, tags, effects, evolutionTier: 1, immediate };
+  return { id, name, cost, type, faction, rarity, stats, text, tags, effects, evolutionTier: 1, immediate, art: null };
 }
 
 export const TYPE_LABELS = {
@@ -20,6 +20,101 @@ export const FACTION_LABELS = {
   moon: "墓月教團",
   iron: "鐵誓遠征軍",
   neutral: "中立遠征者",
+};
+
+export const ART_MANIFEST = {
+  cardBack: "./assets/textures/card-back.svg",
+  icons: {
+    types: {
+      minion: "./assets/icons/type-minion.svg",
+      spell: "./assets/icons/type-spell.svg",
+      secret: "./assets/icons/type-secret.svg",
+      artifact: "./assets/icons/type-artifact.svg",
+    },
+    keywords: {
+      guard: "./assets/icons/keyword-guard.svg",
+      swift: "./assets/icons/keyword-swift.svg",
+      ward: "./assets/icons/keyword-ward.svg",
+      lifesteal: "./assets/icons/keyword-lifesteal.svg",
+      overwhelm: "./assets/icons/keyword-overwhelm.svg",
+    },
+    rarities: {
+      common: "./assets/icons/rarity-common.svg",
+      rare: "./assets/icons/rarity-rare.svg",
+      evolution: "./assets/icons/rarity-evolution.svg",
+    },
+  },
+  fallbackCards: {
+    star: "./assets/factions/star-card.svg",
+    forest: "./assets/factions/forest-card.svg",
+    dragon: "./assets/factions/dragon-card.svg",
+    moon: "./assets/factions/moon-card.svg",
+    iron: "./assets/factions/iron-card.svg",
+    neutral: "./assets/factions/neutral-card.svg",
+  },
+};
+
+export const FACTION_THEMES = {
+  star: {
+    primary: "#7dd3fc",
+    accent: "#c084fc",
+    surface: "#111936",
+    tone: "星圖、鏡面、連鎖法術與冷色反制。",
+    summonerPortrait: "./assets/summoners/star.svg",
+    battlefieldArt: "./assets/factions/star-battlefield.svg",
+    cardBackArt: ART_MANIFEST.cardBack,
+    emblem: "./assets/factions/star-emblem.svg",
+  },
+  forest: {
+    primary: "#86efac",
+    accent: "#facc15",
+    surface: "#10251c",
+    tone: "古林、獸群、治療與生命成長。",
+    summonerPortrait: "./assets/summoners/forest.svg",
+    battlefieldArt: "./assets/factions/forest-battlefield.svg",
+    cardBackArt: ART_MANIFEST.cardBack,
+    emblem: "./assets/factions/forest-emblem.svg",
+  },
+  dragon: {
+    primary: "#fb7185",
+    accent: "#ffd166",
+    surface: "#2a1216",
+    tone: "王庭、熔焰、迅捷壓制與龍族終結。",
+    summonerPortrait: "./assets/summoners/dragon.svg",
+    battlefieldArt: "./assets/factions/dragon-battlefield.svg",
+    cardBackArt: ART_MANIFEST.cardBack,
+    emblem: "./assets/factions/dragon-emblem.svg",
+  },
+  moon: {
+    primary: "#c084fc",
+    accent: "#94a3b8",
+    surface: "#1b1428",
+    tone: "月墓、亡魂、犧牲與復活消耗。",
+    summonerPortrait: "./assets/summoners/moon.svg",
+    battlefieldArt: "./assets/factions/moon-battlefield.svg",
+    cardBackArt: ART_MANIFEST.cardBack,
+    emblem: "./assets/factions/moon-emblem.svg",
+  },
+  iron: {
+    primary: "#f8fafc",
+    accent: "#ffd166",
+    surface: "#1f2937",
+    tone: "鐵誓、遺物、守護與護盾陣線。",
+    summonerPortrait: "./assets/summoners/iron.svg",
+    battlefieldArt: "./assets/factions/iron-battlefield.svg",
+    cardBackArt: ART_MANIFEST.cardBack,
+    emblem: "./assets/factions/iron-emblem.svg",
+  },
+  neutral: {
+    primary: "#aab4c8",
+    accent: "#7dd3fc",
+    surface: "#172033",
+    tone: "遠征補給、旅道支援與中立工具。",
+    summonerPortrait: "./assets/summoners/neutral.svg",
+    battlefieldArt: "./assets/factions/neutral-battlefield.svg",
+    cardBackArt: ART_MANIFEST.cardBack,
+    emblem: "./assets/factions/neutral-emblem.svg",
+  },
 };
 
 export const EVOLUTION_THRESHOLDS = [3, 6, 9, 12, 15];

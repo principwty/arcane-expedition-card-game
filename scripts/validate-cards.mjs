@@ -18,8 +18,11 @@ import { fileURLToPath } from "node:url";
 
 export const SUPPORTED_EFFECTS = new Set([
   "ambushGuard",
+  "adjacentBuff",
+  "backlineBonus",
   "beastHealArtifact",
   "bonusAttackDamage",
+  "breakthrough",
   "buffAll",
   "buffAllIfArtifact",
   "buffAlly",
@@ -50,6 +53,7 @@ export const SUPPORTED_EFFECTS = new Set([
   "firstDeathWraith",
   "firstSpellDraw",
   "flameCounter",
+  "frontlineBonus",
   "gainMana",
   "gainShield",
   "gainShieldBestAlly",
@@ -57,6 +61,7 @@ export const SUPPORTED_EFFECTS = new Set([
   "healOnBeast",
   "healTarget",
   "redirectAttack",
+  "protectBackline",
   "revive",
   "reviveOnDeath",
   "sacrificeDraw",
@@ -84,7 +89,7 @@ const TYPES = new Set(Object.keys(TYPE_LABELS));
 const RARITIES = new Set(["common", "rare", "token", "強化", "發現", "覺醒"]);
 const QUEST_TRIGGERS = new Set(["artifact", "death", "dragonSummon", "guardOrWardSummon", "heal", "heroDamage", "secretOrSilence", "spell", "summon", "undeadSummon"]);
 const QUEST_REWARD_TYPES = new Set(["buffAll", "damageHero", "draw", "shield", "summonToken"]);
-const SUPPORTED_KEYWORDS = new Set(["guard", "swift", "ward", "lifesteal", "overwhelm"]);
+const SUPPORTED_KEYWORDS = new Set(["guard", "swift", "ward", "lifesteal", "overwhelm", "ranged", "vanguard", "support"]);
 const SUPPORTED_STATUSES = new Set(["silenced", "stunned", "cannotAttack", "deathrattleDisabled", "temporaryBuff"]);
 const OUTPUTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../outputs");
 

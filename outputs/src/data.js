@@ -44,6 +44,9 @@ export const ART_MANIFEST = {
       ward: "./assets/icons/keyword-ward.svg",
       lifesteal: "./assets/icons/keyword-lifesteal.svg",
       overwhelm: "./assets/icons/keyword-overwhelm.svg",
+      ranged: "./assets/icons/keyword-ranged.svg",
+      vanguard: "./assets/icons/keyword-vanguard.svg",
+      support: "./assets/icons/keyword-support.svg",
     },
     rarities: {
       common: "./assets/icons/rarity-common.svg",
@@ -149,6 +152,9 @@ export const KEYWORD_LABELS = {
   ward: "護盾",
   lifesteal: "吸血",
   overwhelm: "踐踏",
+  ranged: "遠程",
+  vanguard: "先鋒",
+  support: "支援",
 };
 
 export const DECK_RULES = {
@@ -216,6 +222,11 @@ export const BASE_CARDS = [
   card("void-lecturer", "虛空講師", 4, "minion", "star", "rare", { attack: 3, health: 4, speed: 1 }, "登場：沉默一個召喚物。", ["mage", "secret-control"], [{ type: "silenceMinion", target: "anyMinion" }]),
   card("time-lock-adept", "時鎖修士", 3, "minion", "star", "rare", { attack: 2, health: 4, speed: 1 }, "登場：暈眩一個召喚物。", ["mage", "secret-control", "v1-system"], [{ type: "stunTarget", target: "anyMinion" }]),
   card("afterspell-oracle", "後咒占星師", 2, "minion", "star", "common", { attack: 1, health: 3, speed: 1 }, "你每施放法術，隨機敵人受到 1 點傷害。", ["mage", "spell-chain", "v1-system"], [{ type: "spellPing", amount: 1 }]),
+  card("astral-marksman", "星軌射手", 2, "minion", "star", "common", { attack: 2, health: 2, speed: 1 }, "遠程。", ["mage", "ranged", "spell-chain", "v11-tactics"], []),
+  card("backline-astromancer", "後列占星師", 3, "minion", "star", "rare", { attack: 2, health: 4, speed: 1 }, "支援。你每施放法術，隨機敵人受到 1 點傷害。", ["mage", "support", "spell-chain", "v11-tactics"], [{ type: "spellPing", amount: 1 }]),
+  card("starbridge-weaver", "星橋織者", 2, "minion", "star", "common", { attack: 1, health: 3, speed: 1 }, "支援。若在後排登場，抽 1 張牌。", ["mage", "support", "spell-chain", "v12-position"], [{ type: "backlineBonus", draw: 1 }]),
+  card("prism-frontguard", "折光前衛", 3, "minion", "star", "rare", { attack: 2, health: 5, speed: 1 }, "守護。保護後排：敵方遠程不能越過它攻擊後排。", ["mage", "guard", "secret-control", "v12-position"], [{ type: "protectBackline" }]),
+  card("stellar-alignment", "星位校準", 2, "spell", "star", "common", null, "使一個友方召喚物相鄰的友方召喚物 +1/+1。", ["buff", "spell-chain", "v12-position"], [{ type: "adjacentBuff", attack: 1, health: 1, target: "allyMinion" }]),
 
   card("forest-oathkeeper", "森林守誓者", 3, "minion", "forest", "common", { attack: 3, health: 4, speed: 1 }, "每當你召喚野獸，為你的英雄恢復 1 點生命。", ["beast-ally"], [{ type: "healOnBeast", amount: 1 }]),
   card("antler-guardian", "鹿角守衛", 2, "minion", "forest", "common", { attack: 1, health: 4, speed: 1 }, "守護：敵方必須優先攻擊它。", ["beast", "guard"], []),
@@ -232,6 +243,11 @@ export const BASE_CARDS = [
   card("barkhide-elder", "樹皮長老", 5, "minion", "forest", "rare", { attack: 3, health: 7, speed: 1 }, "守護。登場：為你的英雄恢復 3 點生命。", ["guard", "life-growth"], [{ type: "healHero", amount: 3 }]),
   card("dawn-grove-seer", "晨林先知", 3, "minion", "forest", "rare", { attack: 2, health: 5, speed: 1 }, "你的回合開始時，為你的英雄恢復 2 點生命。", ["life-growth", "v1-system"], [{ type: "startTurnHeal", amount: 2 }]),
   card("pack-heart-drum", "群心鼓手", 4, "minion", "forest", "rare", { attack: 2, health: 4, speed: 1 }, "你的回合開始時，全部友方野獸 +1/+1。", ["beast", "beast-swarm", "v1-system"], [{ type: "startTurnBuffBeasts", attack: 1, health: 1 }]),
+  card("thornline-stag", "棘線鹿衛", 2, "minion", "forest", "common", { attack: 1, health: 4, speed: 1 }, "先鋒、守護。", ["beast", "guard", "vanguard", "beast-swarm", "v11-tactics"], []),
+  card("canopy-archer", "樹冠弓手", 3, "minion", "forest", "common", { attack: 2, health: 3, speed: 1 }, "遠程。登場：為你的英雄恢復 2 點生命。", ["beast", "ranged", "life-growth", "v11-tactics"], [{ type: "healHero", amount: 2 }]),
+  card("rootnet-warden", "根網庇護者", 3, "minion", "forest", "rare", { attack: 2, health: 5, speed: 1 }, "守護。保護後排。", ["beast", "guard", "life-growth", "v12-position"], [{ type: "protectBackline" }]),
+  card("vine-tactician", "藤蔓調律者", 2, "minion", "forest", "common", { attack: 1, health: 3, speed: 1 }, "支援。登場：相鄰友方召喚物 +0/+1。", ["beast", "support", "beast-swarm", "v12-position"], [{ type: "adjacentBuff", attack: 0, health: 1 }]),
+  card("canopy-formation", "林冠陣式", 3, "spell", "forest", "common", null, "使一個友方召喚物相鄰的友方召喚物 +1/+2。", ["buff", "beast-swarm", "v12-position"], [{ type: "adjacentBuff", attack: 1, health: 2, target: "allyMinion" }]),
 
   card("dragon-judgment", "龍焰裁決", 4, "spell", "dragon", "rare", null, "對一個敵方目標造成 5 點傷害；若本局已進化 2 次，改為造成 7 點。", ["damage"], [{ type: "dragonJudgment", target: "enemy" }]),
   card("ember-squire", "餘燼侍從", 1, "minion", "dragon", "common", { attack: 2, health: 1, speed: 2 }, "迅捷。", ["soldier", "swift"], []),
@@ -248,6 +264,11 @@ export const BASE_CARDS = [
   card("skyfire-whelp", "天火雛龍", 6, "minion", "dragon", "rare", { attack: 5, health: 5, speed: 2 }, "迅捷、踐踏。", ["dragon", "swift", "overwhelm", "dragon-finish"], []),
   card("bloodwing-vanguard", "血翼先鋒", 3, "minion", "dragon", "rare", { attack: 4, health: 2, speed: 2 }, "迅捷、踐踏。", ["soldier", "swift", "overwhelm", "aggro-burn", "v1-system"], []),
   card("battle-fury-edict", "戰怒敕令", 2, "spell", "dragon", "common", null, "使一個友方召喚物本回合 +2/+0。", ["buff", "aggro-burn", "v1-system"], [{ type: "temporaryBuff", attack: 2, health: 0, target: "allyMinion" }]),
+  card("spearline-raider", "槍線突襲者", 2, "minion", "dragon", "common", { attack: 2, health: 2, speed: 2 }, "迅捷、先鋒。", ["soldier", "swift", "vanguard", "aggro-burn", "v11-tactics"], []),
+  card("skyfire-ballista", "天火弩砲", 4, "minion", "dragon", "rare", { attack: 4, health: 3, speed: 1 }, "遠程、踐踏。", ["dragon", "ranged", "overwhelm", "dragon-finish", "v11-tactics"], []),
+  card("linepiercer-lancer", "破陣槍騎", 3, "minion", "dragon", "common", { attack: 3, health: 3, speed: 2 }, "迅捷。突破：攻擊前排後，對同列後排造成 1 點傷害。", ["soldier", "swift", "aggro-burn", "v12-position"], [{ type: "breakthrough", amount: 1 }]),
+  card("emberline-horn", "焰線號手", 2, "minion", "dragon", "common", { attack: 2, health: 2, speed: 1 }, "先鋒。若在前排登場，獲得 +1/+0。", ["soldier", "vanguard", "aggro-burn", "v12-position"], [{ type: "frontlineBonus", attack: 1, health: 0 }]),
+  card("skyspear-drake", "天矛幼龍", 5, "minion", "dragon", "rare", { attack: 5, health: 4, speed: 1 }, "遠程。突破：攻擊前排後，對同列後排造成 2 點傷害。", ["dragon", "ranged", "dragon-finish", "v12-position"], [{ type: "breakthrough", amount: 2 }]),
 
   card("moon-echo", "月墓回聲", 2, "secret", "moon", "rare", null, "秘儀：當敵方召喚物攻擊時，召喚 1 個 1/1 亡魂並使攻擊目標改為它。", ["secret"], [{ type: "redirectAttack" }]),
   card("bone-acolyte", "白骨侍祭", 2, "minion", "moon", "common", { attack: 2, health: 2, speed: 1 }, "死亡：抽 1 張牌。", ["undead"], [{ type: "drawOnDeath", amount: 1 }]),
@@ -263,6 +284,11 @@ export const BASE_CARDS = [
   card("barrow-knight", "古塚騎士", 5, "minion", "moon", "rare", { attack: 4, health: 6, speed: 1 }, "死亡：抽 1 張牌。", ["undead", "revive-grind"], [{ type: "drawOnDeath", amount: 1 }]),
   card("last-rite-censor", "終儀禁書吏", 3, "minion", "moon", "rare", { attack: 3, health: 3, speed: 1 }, "登場：封鎖一個召喚物的死亡效果。", ["undead", "sacrifice-draw", "v1-system"], [{ type: "disableDeathrattle", target: "anyMinion" }]),
   card("bone-tithe", "骨稅徵收", 2, "spell", "moon", "common", null, "對一個友方召喚物造成 1 點傷害，召喚 1 個 1/1 亡魂。", ["sacrifice", "revive-grind", "v1-system"], [{ type: "damageAllyMinion", amount: 1 }, { type: "summonToken", token: "wraith" }]),
+  card("gravebow-wraith", "墓弓亡魂", 2, "minion", "moon", "common", { attack: 2, health: 1, speed: 1 }, "遠程。死亡：抽 1 張牌。", ["undead", "ranged", "revive-grind", "v11-tactics"], [{ type: "drawOnDeath", amount: 1 }]),
+  card("frontline-revenant", "前線歸魂者", 3, "minion", "moon", "common", { attack: 2, health: 4, speed: 1 }, "先鋒。死亡：召喚 1 個 1/1 亡魂。", ["undead", "vanguard", "sacrifice-draw", "v11-tactics"], [{ type: "summonOnDeath", token: "wraith" }]),
+  card("grave-line-summoner", "墓列招魂師", 3, "minion", "moon", "rare", { attack: 2, health: 3, speed: 1 }, "支援。若在後排登場，抽 1 張牌。", ["undead", "support", "revive-grind", "v12-position"], [{ type: "backlineBonus", draw: 1 }]),
+  card("bonewall-keeper", "骨牆守衛", 2, "minion", "moon", "common", { attack: 1, health: 4, speed: 1 }, "守護。保護後排。死亡：召喚 1 個 1/1 亡魂。", ["undead", "guard", "sacrifice-draw", "v12-position"], [{ type: "protectBackline" }, { type: "summonOnDeath", token: "wraith" }]),
+  card("deadlane-command", "亡陣號令", 2, "spell", "moon", "common", null, "使一個友方召喚物相鄰的友方召喚物 +1/+0。若已有 3 個友方死亡，抽 1 張牌。", ["sacrifice", "revive-grind", "v12-position"], [{ type: "adjacentBuff", attack: 1, health: 0, target: "allyMinion" }, { type: "drawIfDeaths", deaths: 3, amount: 1 }]),
 
   card("expedition-banner", "遠征旗印", 3, "artifact", "iron", "rare", null, "你的召喚物每回合首次進攻後，遠征軌 +1。", ["banner"], [{ type: "firstAttackExpedition", amount: 1 }]),
   card("iron-vanguard", "鐵誓先鋒", 2, "minion", "iron", "common", { attack: 2, health: 3, speed: 1 }, "若你控制遺物，獲得 +1/+1。", ["soldier"], [{ type: "buffIfArtifact", amount: 1 }]),
@@ -279,6 +305,11 @@ export const BASE_CARDS = [
   card("tower-shield-bearer", "塔盾承誓者", 4, "minion", "iron", "rare", { attack: 2, health: 7, speed: 1 }, "守護、護盾。", ["soldier", "guard", "ward", "guard-wall"], []),
   card("aegis-clockwork", "聖盾機工", 3, "minion", "iron", "rare", { attack: 2, health: 4, speed: 1 }, "守護。登場：賦予最佳友方召喚物護盾。", ["soldier", "guard", "guard-wall", "v1-system"], [{ type: "gainShieldBestAlly" }]),
   card("bastion-chronicle", "壁壘紀事", 3, "artifact", "iron", "rare", null, "你的回合開始時，賦予一個友方召喚物護盾。", ["relic-midrange", "guard-wall", "v1-system"], [{ type: "startTurnShield" }]),
+  card("linebreaker-captain", "破線隊長", 3, "minion", "iron", "common", { attack: 2, health: 4, speed: 1 }, "先鋒、守護。", ["soldier", "guard", "vanguard", "guard-wall", "v11-tactics"], []),
+  card("relic-crossbow", "遺跡弩手", 2, "minion", "iron", "common", { attack: 2, health: 2, speed: 1 }, "遠程。若你控制遺物，抽 1 張牌。", ["soldier", "ranged", "relic-midrange", "v11-tactics"], [{ type: "drawIfArtifact", amount: 1 }]),
+  card("shieldrail-engineer", "盾軌工程師", 2, "minion", "iron", "common", { attack: 1, health: 4, speed: 1 }, "守護。保護後排。", ["soldier", "guard", "guard-wall", "v12-position"], [{ type: "protectBackline" }]),
+  card("flank-sergeant", "側翼軍士", 3, "minion", "iron", "common", { attack: 2, health: 4, speed: 1 }, "登場：相鄰友方召喚物 +1/+1。", ["soldier", "relic-midrange", "v12-position"], [{ type: "adjacentBuff", attack: 1, health: 1 }]),
+  card("bastion-ballista", "堡壘弩砲", 4, "minion", "iron", "rare", { attack: 3, health: 5, speed: 1 }, "遠程。若在後排登場，獲得護盾。", ["soldier", "ranged", "guard-wall", "v12-position"], [{ type: "backlineBonus", shield: true }]),
 
   card("wandering-sprite", "流浪小精", 1, "minion", "neutral", "common", { attack: 1, health: 2, speed: 2 }, "迅捷。", ["beast", "swift"], []),
   card("arcane-rations", "奧術乾糧", 1, "spell", "neutral", "common", null, "抽 1 張牌。", ["draw"], [{ type: "draw", amount: 1 }]),
@@ -288,6 +319,9 @@ export const BASE_CARDS = [
   card("trail-provisions", "旅途補給", 2, "spell", "neutral", "common", null, "抽 1 張牌，為你的英雄恢復 2 點生命。", ["draw", "quest-support"], [{ type: "draw", amount: 1 }, { type: "healHero", amount: 2 }]),
   card("banner-escort", "旗隊護衛", 3, "minion", "neutral", "common", { attack: 2, health: 5, speed: 1 }, "守護。", ["guard", "quest-support"], []),
   card("relic-surveyor", "遺跡測繪員", 4, "minion", "neutral", "rare", { attack: 3, health: 4, speed: 1 }, "戰吼：抽 1 張牌。", ["relic-midrange", "quest-support"], [{ type: "draw", amount: 1 }]),
+  card("field-surveyor", "陣地測量員", 2, "minion", "neutral", "common", { attack: 1, health: 3, speed: 1 }, "支援。若在後排登場，抽 1 張牌。", ["support", "quest-support", "v12-position"], [{ type: "backlineBonus", draw: 1 }]),
+  card("frontline-mercenary", "前線佣兵", 2, "minion", "neutral", "common", { attack: 2, health: 3, speed: 1 }, "先鋒。", ["vanguard", "quest-support", "v12-position"], []),
+  card("caravan-barricade", "旅團護欄", 3, "minion", "neutral", "common", { attack: 1, health: 5, speed: 1 }, "守護。保護後排。", ["guard", "quest-support", "v12-position"], [{ type: "protectBackline" }]),
 ];
 
 export const EVOLUTION_CARDS = [
@@ -298,6 +332,9 @@ export const EVOLUTION_CARDS = [
   evo("astral-loop", "星環迴路", 2, "spell", "star", "強化", "抽 1 張牌，推進遠征軌 +1。", [{ type: "draw", amount: 1 }, { type: "expedition", amount: 1, target: "none" }], true, null, ["spell-chain"]),
   evo("grand-nullarium", "大無效館", 4, "artifact", "star", "覺醒", "每回合第一次施放法術後，抽 1 張牌。覺醒：星讀改為抽 2 張牌。", [{ type: "firstSpellDraw", amount: 1 }, { type: "upgradeHeroPower", mode: "star" }], false, null, ["secret-control"]),
   evo("time-prism", "時序稜鏡", 3, "spell", "star", "強化", "暈眩一個召喚物，抽 1 張牌。", [{ type: "stunTarget", target: "anyMinion" }, { type: "draw", amount: 1 }], true, null, ["secret-control", "v1-system"]),
+  evo("constellation-snipers", "星座狙擊線", 4, "minion", "star", "發現", "3/4。遠程、支援。登場：抽 1 張牌。", [{ type: "draw", amount: 1 }], false, { attack: 3, health: 4, speed: 1 }, ["ranged", "support", "spell-chain", "v11-tactics"]),
+  evo("astral-crossfire", "星盤交叉火力", 3, "spell", "star", "強化", "使一個友方召喚物相鄰的友方召喚物 +2/+1，抽 1 張牌。", [{ type: "adjacentBuff", attack: 2, health: 1, target: "allyMinion" }, { type: "draw", amount: 1 }], true, null, ["spell-chain", "v12-position"]),
+  evo("mirror-bastion", "鏡界堡衛", 5, "minion", "star", "發現", "3/7。守護。保護後排。登場：抽 1 張牌。", [{ type: "protectBackline" }, { type: "draw", amount: 1 }], false, { attack: 3, health: 7, speed: 1 }, ["guard", "secret-control", "v12-position"]),
   evo("worldroot-blessing", "世界根祝福", 3, "spell", "forest", "強化", "使全部友方召喚物 +1/+2，恢復 3 點生命。", [{ type: "buffAll", attack: 1, health: 2 }, { type: "healHero", amount: 3 }], true),
   evo("ancient-pack", "太古獸群", 6, "minion", "forest", "發現", "6/7。登場：召喚 2 個 1/1 小鹿。", [{ type: "summonToken", token: "fawn" }, { type: "summonToken", token: "fawn" }], false, { attack: 6, health: 7, speed: 1 }, ["beast"]),
   evo("verdant-sanctuary", "翠綠聖域", 4, "artifact", "forest", "覺醒", "每回合第一次召喚野獸時，為你的英雄恢復 2 點生命。覺醒：滋養額外賦予護盾。", [{ type: "beastHealArtifact", amount: 2 }, { type: "upgradeHeroPower", mode: "forest" }]),
@@ -305,6 +342,9 @@ export const EVOLUTION_CARDS = [
   evo("pack-horizon", "獸群地平線", 4, "spell", "forest", "發現", "召喚 2 個 1/1 小鹿，抽 1 張牌。", [{ type: "summonToken", token: "fawn" }, { type: "summonToken", token: "fawn" }, { type: "draw", amount: 1 }], true, null, ["beast-swarm"]),
   evo("heartwood-crown", "心木冠冕", 5, "artifact", "forest", "覺醒", "每回合第一次召喚野獸時，為你的英雄恢復 2 點生命。覺醒：滋養額外恢復。", [{ type: "beastHealArtifact", amount: 2 }, { type: "upgradeHeroPower", mode: "forest" }], false, null, ["life-growth"]),
   evo("dawnroot-sanctum", "晨根聖所", 4, "artifact", "forest", "覺醒", "你的回合開始時，為你的英雄恢復 2 點生命。覺醒：滋養額外恢復。", [{ type: "startTurnHeal", amount: 2 }, { type: "upgradeHeroPower", mode: "forest" }], false, null, ["life-growth", "v1-system"]),
+  evo("greatwood-front", "巨木前線", 5, "minion", "forest", "發現", "4/7。先鋒、守護。登場：召喚 1 個 1/1 小鹿。", [{ type: "summonToken", token: "fawn" }], false, { attack: 4, health: 7, speed: 1 }, ["guard", "vanguard", "beast-swarm", "v11-tactics"]),
+  evo("living-rootwall", "活根護幕", 3, "spell", "forest", "強化", "使一個友方召喚物相鄰的友方召喚物 +1/+3，恢復 2 點生命。", [{ type: "adjacentBuff", attack: 1, health: 3, target: "allyMinion" }, { type: "healHero", amount: 2 }], true, null, ["beast-swarm", "life-growth", "v12-position"]),
+  evo("thousand-branch-front", "萬枝戰線", 6, "minion", "forest", "發現", "4/8。守護。保護後排。登場：召喚 1 個 1/1 小鹿。", [{ type: "protectBackline" }, { type: "summonToken", token: "fawn" }], false, { attack: 4, health: 8, speed: 1 }, ["guard", "beast-swarm", "v12-position"]),
   evo("dragon-crown", "龍王冠冕", 6, "artifact", "dragon", "覺醒", "你的傷害法術額外造成 2 點傷害。覺醒：龍息改為 3 點傷害。", [{ type: "spellDamage", amount: 2 }, { type: "upgradeHeroPower", mode: "dragon" }]),
   evo("apex-dragon", "終焰巨龍", 8, "minion", "dragon", "發現", "8/8。迅捷、踐踏。登場：對敵方英雄造成 4 點傷害。", [{ type: "damageHero", amount: 4 }], false, { attack: 8, health: 8, speed: 2 }, ["dragon", "swift", "overwhelm"]),
   evo("inferno-chain", "煉獄連鎖", 4, "spell", "dragon", "強化", "對一個敵方目標造成 4 點傷害。若擊敗召喚物，推進遠征軌 +1。", [{ type: "damage", amount: 4, target: "enemy" }, { type: "expeditionIfTargetDies", amount: 1 }], true),
@@ -312,6 +352,9 @@ export const EVOLUTION_CARDS = [
   evo("ember-coronation", "餘燼加冕", 3, "spell", "dragon", "強化", "對一個敵方目標造成 3 點傷害，抽 1 張牌。", [{ type: "damage", amount: 3, target: "enemy" }, { type: "draw", amount: 1 }], true, null, ["aggro-burn"]),
   evo("wyrm-king-arrival", "龍王將臨", 7, "minion", "dragon", "發現", "7/7。迅捷、踐踏。登場：對敵方英雄造成 3 點傷害。", [{ type: "damageHero", amount: 3 }], false, { attack: 7, health: 7, speed: 2 }, ["dragon", "swift", "overwhelm", "dragon-finish"]),
   evo("overrun-command", "踏陣號令", 3, "spell", "dragon", "強化", "使一個友方召喚物本回合 +3/+0。", [{ type: "temporaryBuff", attack: 3, health: 0, target: "allyMinion" }], true, null, ["aggro-burn", "v1-system"]),
+  evo("skyline-onslaught", "天線猛攻", 5, "minion", "dragon", "發現", "5/4。迅捷、遠程。", [], false, { attack: 5, health: 4, speed: 2 }, ["dragon", "swift", "ranged", "dragon-finish", "v11-tactics"]),
+  evo("dragonlance-breaker", "破陣龍槍", 5, "minion", "dragon", "發現", "5/4。迅捷。突破：對同列後排造成 2 點傷害。", [{ type: "breakthrough", amount: 2 }], false, { attack: 5, health: 4, speed: 2 }, ["dragon", "swift", "aggro-burn", "v12-position"]),
+  evo("skyrake-line", "天焰穿線", 4, "spell", "dragon", "強化", "對一個敵方目標造成 4 點傷害。若擊敗召喚物，推進遠征軌 +1。", [{ type: "damage", amount: 4, target: "enemy" }, { type: "expeditionIfTargetDies", amount: 1 }], true, null, ["dragon-finish", "v12-position"]),
   evo("grave-covenant", "墓園契約", 4, "artifact", "moon", "覺醒", "每回合第一次友方召喚物死亡時，召喚 1 個 1/1 亡魂。覺醒：血契改為抽 2 張牌。", [{ type: "firstDeathWraith" }, { type: "upgradeHeroPower", mode: "moon" }]),
   evo("deathless-choir", "不死合唱", 5, "spell", "moon", "發現", "復活本局死亡的兩個友方召喚物。", [{ type: "revive", amount: 2 }], true),
   evo("bone-legion", "骨軍敕令", 4, "spell", "moon", "強化", "召喚 2 個 1/1 亡魂。若本局已有 3 個友方召喚物死亡，再抽 1 張牌。", [{ type: "summonToken", token: "wraith" }, { type: "summonToken", token: "wraith" }, { type: "drawIfDeaths", deaths: 3, amount: 1 }], true),
@@ -319,6 +362,9 @@ export const EVOLUTION_CARDS = [
   evo("inkblood-pact", "墨血契文", 3, "spell", "moon", "強化", "對一個友方召喚物造成 1 點傷害，抽 1 張牌，推進遠征軌 +1。", [{ type: "sacrificeDraw", target: "allyMinion" }, { type: "expedition", amount: 1, target: "none" }], true, null, ["sacrifice-draw"]),
   evo("catacomb-procession", "墓道行列", 5, "spell", "moon", "發現", "召喚 3 個 1/1 亡魂，抽 1 張牌。", [{ type: "summonToken", token: "wraith" }, { type: "summonToken", token: "wraith" }, { type: "summonToken", token: "wraith" }, { type: "draw", amount: 1 }], true, null, ["revive-grind"]),
   evo("sealed-epitaph", "封魂墓誌", 2, "spell", "moon", "強化", "封鎖一個召喚物的死亡效果，抽 1 張牌。", [{ type: "disableDeathrattle", target: "anyMinion" }, { type: "draw", amount: 1 }], true, null, ["sacrifice-draw", "v1-system"]),
+  evo("midnight-firing-line", "午夜射線", 4, "spell", "moon", "發現", "召喚 2 個 2/1 遠程墓弓亡魂。", [{ type: "summonToken", token: "gravebow" }, { type: "summonToken", token: "gravebow" }], true, null, ["revive-grind", "v11-tactics"]),
+  evo("crypt-crossbind", "墓道交縛", 3, "spell", "moon", "強化", "使一個友方召喚物相鄰的友方召喚物 +1/+1，召喚 1 個 1/1 亡魂。", [{ type: "adjacentBuff", attack: 1, health: 1, target: "allyMinion" }, { type: "summonToken", token: "wraith" }], true, null, ["revive-grind", "v12-position"]),
+  evo("longnight-bonewall", "長夜骨牆", 5, "minion", "moon", "發現", "3/7。守護。保護後排。死亡：召喚 2 個 1/1 亡魂。", [{ type: "protectBackline" }, { type: "summonOnDeath", token: "wraith" }, { type: "summonOnDeath", token: "wraith" }], false, { attack: 3, health: 7, speed: 1 }, ["guard", "sacrifice-draw", "v12-position"]),
   evo("forge-directive", "鍛爐指令", 2, "spell", "iron", "強化", "使一個友方召喚物 +2/+2。若你控制遺物，抽 1 張牌。", [{ type: "buffAlly", attack: 2, health: 2, target: "allyMinion" }, { type: "drawIfArtifact", amount: 1, target: "none" }], true),
   evo("colossus-frame", "巨像框架", 7, "minion", "iron", "發現", "7/9。守護、護盾。你的遺物不會被摧毀。", [], false, { attack: 7, health: 9, speed: 1 }, ["guard", "ward"]),
   evo("arsenal-awakening", "軍械覺醒", 4, "artifact", "iron", "覺醒", "你的召喚物每回合首次攻擊後，使其 +1/+1。覺醒：鍛造改為 +2/+2。", [{ type: "firstAttackBuff", attack: 1, health: 1 }, { type: "upgradeHeroPower", mode: "iron" }]),
@@ -326,6 +372,9 @@ export const EVOLUTION_CARDS = [
   evo("living-bulwark", "活化壁壘", 5, "minion", "iron", "發現", "4/8。守護、護盾。登場：推進遠征軌 +1。", [{ type: "expedition", amount: 1 }], false, { attack: 4, health: 8, speed: 1 }, ["guard", "ward", "guard-wall"]),
   evo("relic-foundry", "遺物鑄所", 4, "artifact", "iron", "覺醒", "你的第一個召喚物攻擊時，額外造成 1 點傷害。覺醒：鍛造改為 +2/+2。", [{ type: "bonusAttackDamage", amount: 1 }, { type: "upgradeHeroPower", mode: "iron" }], false, null, ["relic-midrange"]),
   evo("fortress-sequence", "要塞序列", 4, "artifact", "iron", "覺醒", "你的回合開始時，賦予一個友方召喚物護盾。覺醒：鍛造改為 +2/+2。", [{ type: "startTurnShield" }, { type: "upgradeHeroPower", mode: "iron" }], false, null, ["guard-wall", "v1-system"]),
+  evo("crossfire-bastion", "交叉火力堡壘", 5, "minion", "iron", "發現", "4/6。守護、遠程。登場：賦予最佳友方召喚物護盾。", [{ type: "gainShieldBestAlly" }], false, { attack: 4, health: 6, speed: 1 }, ["guard", "ranged", "relic-midrange", "v11-tactics"]),
+  evo("iron-dome-array", "鐵穹陣列", 4, "spell", "iron", "強化", "使一個友方召喚物相鄰的友方召喚物 +2/+2，並賦予最佳友方護盾。", [{ type: "adjacentBuff", attack: 2, health: 2, target: "allyMinion" }, { type: "gainShieldBestAlly" }], true, null, ["guard-wall", "v12-position"]),
+  evo("citadel-linebreaker", "城塞破線者", 6, "minion", "iron", "發現", "5/7。守護。保護後排。突破：對同列後排造成 1 點傷害。", [{ type: "protectBackline" }, { type: "breakthrough", amount: 1 }], false, { attack: 5, health: 7, speed: 1 }, ["guard", "relic-midrange", "v12-position"]),
   evo("expedition-map", "遠征星圖", 2, "spell", "neutral", "發現", "抽 1 張牌，推進遠征軌 +1。", [{ type: "draw", amount: 1 }, { type: "expedition", amount: 1, target: "none" }], true),
   evo("veteran-summoner", "老練召喚師", 4, "minion", "neutral", "強化", "4/5。登場：召喚 1 個 1/1 小鹿。", [{ type: "summonToken", token: "fawn" }], false, { attack: 4, health: 5, speed: 1 }, ["mage"]),
   evo("aegis-relic", "庇護遺物", 3, "artifact", "neutral", "覺醒", "你的第一個召喚物攻擊時，額外造成 1 點傷害。", [{ type: "bonusAttackDamage", amount: 1 }]),
@@ -339,6 +388,7 @@ export const TOKENS = {
   fawn: card("token-fawn", "小鹿", 0, "minion", "forest", "token", { attack: 1, health: 1, speed: 1 }, "可愛但認真。", ["beast"], []),
   wraith: card("token-wraith", "亡魂", 0, "minion", "moon", "token", { attack: 1, health: 1, speed: 1 }, "短暫回到戰場。", ["undead"], []),
   fireling: card("token-fireling", "幼火龍", 0, "minion", "dragon", "token", { attack: 4, health: 3, speed: 1 }, "火翼剛展，已經很兇。", ["dragon"], []),
+  gravebow: card("token-gravebow", "墓弓亡魂", 0, "minion", "moon", "token", { attack: 2, health: 1, speed: 1 }, "遠程。", ["undead", "ranged"], []),
 };
 
 applyRepresentativeArt();
@@ -360,16 +410,16 @@ export const QUEST_LINES = [
 ];
 
 export const DECK_ARCHETYPES = [
-  archetype("star-spell-chain-template", "星穹連式模板", "star", "star-spell-chain", "低費法術與抽牌連動，快速推進遠征。", ["spell-chain"], [["star-apprentice", 3], ["astral-bolt", 3], ["leyline-scribe", 3], ["stellar-lesson", 3], ["rune-curator", 3], ["starlit-aegis", 2], ["comet-scholar", 2], ["meteor-study", 2], ["arcane-rations", 3], ["questing-page", 3], ["trail-provisions", 3]]),
-  archetype("star-secret-control-template", "鏡廳控制模板", "star", "star-secret-control", "秘儀與沉默壓制節奏，再靠抽牌拉開資源。", ["secret-control"], [["mirror-rune", 3], ["summon-snare", 3], ["counter-orbit", 3], ["void-lecturer", 3], ["null-glyph", 3], ["rune-curator", 2], ["starlit-aegis", 2], ["meteor-study", 2], ["road-guard", 3], ["field-medic", 3], ["relic-surveyor", 3]]),
-  archetype("forest-beast-swarm-template", "百獸鋪場模板", "forest", "forest-beast-swarm", "用小鹿與野獸快速鋪場，靠群體增益收束。", ["beast-swarm"], [["fawncaller-piper", 3], ["antler-guardian", 3], ["wild-growth", 3], ["sapling-circle", 3], ["pack-matriarch", 3], ["forest-oathkeeper", 2], ["pack-chant", 3], ["elder-bear", 2], ["wandering-sprite", 3], ["questing-page", 3], ["trail-provisions", 2]]),
-  archetype("forest-life-growth-template", "年輪成長模板", "forest", "forest-life-growth", "守護與治療拖住節奏，靠大生命場面取勝。", ["life-growth"], [["canopy-salve", 3], ["thorn-mender", 3], ["barkhide-elder", 3], ["great-stag", 3], ["antler-guardian", 3], ["wild-growth", 2], ["forest-oathkeeper", 2], ["pack-chant", 2], ["road-guard", 3], ["field-medic", 3], ["banner-escort", 3]]),
-  archetype("dragon-aggro-burn-template", "燼火快攻模板", "dragon", "dragon-aggro-burn", "迅捷單位和直傷壓低血量，逼迫對手解場。", ["aggro-burn"], [["ember-squire", 3], ["cinder-duelist", 3], ["ash-runner", 3], ["flame-lance", 3], ["royal-igniter", 3], ["scorching-breath", 2], ["dragon-banneret", 2], ["dragon-judgment", 2], ["wandering-sprite", 3], ["arcane-rations", 3], ["questing-page", 3]]),
-  archetype("dragon-finish-template", "龍族終結模板", "dragon", "dragon-dragon-finish", "用龍卵與中期遺物支撐，接高費龍族終結。", ["dragon-finish"], [["molten-egg", 3], ["young-drake", 3], ["skyfire-whelp", 3], ["drake-roost", 3], ["dragon-judgment", 3], ["flame-ward", 2], ["scorching-breath", 2], ["dragon-banneret", 2], ["road-guard", 3], ["trail-provisions", 3], ["relic-surveyor", 3]]),
-  archetype("moon-sacrifice-template", "血墨犧牲模板", "moon", "moon-sacrifice-draw", "用低費犧牲與死亡抽牌換資源，持續推進遠征。", ["sacrifice-draw"], [["grave-offering", 3], ["rite-of-pages", 3], ["bone-acolyte", 3], ["hollow-butcher", 3], ["blood-ledger", 3], ["crypt-bell", 2], ["soul-siphon", 2], ["night-revenant", 2], ["wandering-sprite", 3], ["questing-page", 3], ["trail-provisions", 3]]),
-  archetype("moon-revive-template", "歸魂消耗模板", "moon", "moon-revive-grind", "召喚亡魂並反覆復活，拖長對局耗盡對手。", ["revive-grind"], [["moon-echo", 3], ["grave-matron", 3], ["grave-swarm", 3], ["night-revenant", 3], ["barrow-knight", 3], ["bone-acolyte", 2], ["soul-siphon", 2], ["crypt-bell", 2], ["road-guard", 3], ["field-medic", 3], ["relic-surveyor", 3]]),
-  archetype("iron-relic-template", "鐵誓遺物模板", "iron", "iron-relic-midrange", "多遺物帶動中速場面，穩定滾雪球。", ["relic-midrange"], [["expedition-banner", 3], ["relic-hammer", 3], ["oathbound-armory", 3], ["supply-caravan", 3], ["iron-vanguard", 3], ["relic-breaker", 2], ["steel-captain", 2], ["shield-engineer", 2], ["road-guard", 3], ["questing-page", 3], ["relic-surveyor", 3]]),
-  archetype("iron-guard-template", "盾牆護衛模板", "iron", "iron-guard-wall", "守護與護盾建立防線，再用增益逐步反推。", ["guard-wall"], [["bulwark-sentinel", 3], ["tower-shield-bearer", 3], ["shield-line", 3], ["formation-drill", 3], ["aegis-protocol", 3], ["shield-engineer", 2], ["steel-captain", 2], ["expedition-banner", 2], ["road-guard", 3], ["banner-escort", 3], ["field-medic", 3]]),
+  archetype("star-spell-chain-template", "星穹連式模板", "star", "star-spell-chain", "低費法術與抽牌連動，快速推進遠征。", ["spell-chain"], [["star-apprentice", 3], ["astral-bolt", 3], ["leyline-scribe", 3], ["stellar-lesson", 3], ["rune-curator", 3], ["starlit-aegis", 2], ["backline-astromancer", 2], ["meteor-study", 2], ["astral-marksman", 3], ["starbridge-weaver", 3], ["stellar-alignment", 2], ["trail-provisions", 1]]),
+  archetype("star-secret-control-template", "鏡廳控制模板", "star", "star-secret-control", "秘儀與沉默壓制節奏，再靠抽牌拉開資源。", ["secret-control"], [["mirror-rune", 3], ["summon-snare", 3], ["counter-orbit", 3], ["void-lecturer", 3], ["null-glyph", 3], ["rune-curator", 2], ["starlit-aegis", 2], ["meteor-study", 2], ["astral-marksman", 3], ["prism-frontguard", 3], ["relic-surveyor", 3]]),
+  archetype("forest-beast-swarm-template", "百獸鋪場模板", "forest", "forest-beast-swarm", "用小鹿與野獸快速鋪場，靠群體增益收束。", ["beast-swarm"], [["fawncaller-piper", 3], ["thornline-stag", 3], ["wild-growth", 3], ["sapling-circle", 3], ["pack-matriarch", 3], ["forest-oathkeeper", 2], ["pack-chant", 3], ["elder-bear", 2], ["vine-tactician", 3], ["canopy-formation", 2], ["questing-page", 3]]),
+  archetype("forest-life-growth-template", "年輪成長模板", "forest", "forest-life-growth", "守護與治療拖住節奏，靠大生命場面取勝。", ["life-growth"], [["canopy-salve", 3], ["thorn-mender", 3], ["barkhide-elder", 3], ["great-stag", 3], ["canopy-archer", 3], ["wild-growth", 2], ["forest-oathkeeper", 2], ["pack-chant", 2], ["rootnet-warden", 3], ["canopy-formation", 2], ["banner-escort", 2], ["field-medic", 2]]),
+  archetype("dragon-aggro-burn-template", "燼火快攻模板", "dragon", "dragon-aggro-burn", "迅捷單位和直傷壓低血量，逼迫對手解場。", ["aggro-burn"], [["ember-squire", 3], ["cinder-duelist", 3], ["ash-runner", 3], ["flame-lance", 3], ["royal-igniter", 3], ["scorching-breath", 2], ["dragon-banneret", 2], ["dragon-judgment", 2], ["spearline-raider", 3], ["linepiercer-lancer", 3], ["emberline-horn", 3]]),
+  archetype("dragon-finish-template", "龍族終結模板", "dragon", "dragon-dragon-finish", "用龍卵與中期遺物支撐，接高費龍族終結。", ["dragon-finish"], [["molten-egg", 3], ["young-drake", 3], ["skyfire-whelp", 3], ["drake-roost", 3], ["dragon-judgment", 3], ["flame-ward", 2], ["scorching-breath", 2], ["dragon-banneret", 2], ["skyfire-ballista", 3], ["skyspear-drake", 3], ["relic-surveyor", 3]]),
+  archetype("moon-sacrifice-template", "血墨犧牲模板", "moon", "moon-sacrifice-draw", "用低費犧牲與死亡抽牌換資源，持續推進遠征。", ["sacrifice-draw"], [["grave-offering", 3], ["rite-of-pages", 3], ["bone-acolyte", 3], ["hollow-butcher", 3], ["blood-ledger", 3], ["crypt-bell", 2], ["soul-siphon", 2], ["night-revenant", 2], ["frontline-revenant", 3], ["bonewall-keeper", 3], ["deadlane-command", 3]]),
+  archetype("moon-revive-template", "歸魂消耗模板", "moon", "moon-revive-grind", "召喚亡魂並反覆復活，拖長對局耗盡對手。", ["revive-grind"], [["moon-echo", 3], ["grave-matron", 3], ["grave-swarm", 3], ["night-revenant", 3], ["barrow-knight", 3], ["bone-acolyte", 2], ["soul-siphon", 2], ["crypt-bell", 2], ["gravebow-wraith", 3], ["grave-line-summoner", 3], ["deadlane-command", 3]]),
+  archetype("iron-relic-template", "鐵誓遺物模板", "iron", "iron-relic-midrange", "多遺物帶動中速場面，穩定滾雪球。", ["relic-midrange"], [["expedition-banner", 3], ["relic-hammer", 3], ["oathbound-armory", 3], ["supply-caravan", 3], ["iron-vanguard", 3], ["relic-breaker", 2], ["steel-captain", 2], ["shield-engineer", 2], ["flank-sergeant", 3], ["relic-crossbow", 3], ["bastion-ballista", 3]]),
+  archetype("iron-guard-template", "盾牆護衛模板", "iron", "iron-guard-wall", "守護與護盾建立防線，再用增益逐步反推。", ["guard-wall"], [["bulwark-sentinel", 3], ["tower-shield-bearer", 3], ["shield-line", 3], ["formation-drill", 3], ["aegis-protocol", 3], ["shield-engineer", 2], ["steel-captain", 2], ["expedition-banner", 2], ["linebreaker-captain", 3], ["shieldrail-engineer", 3], ["flank-sergeant", 3]]),
 ];
 
 export const DEFAULT_DECK_RECIPES = Object.fromEntries(
@@ -404,7 +454,12 @@ function firstQuestId(summonerId) {
 
 function defaultDeckCardIds(faction) {
   const rawFactionCards = BASE_CARDS.filter((item) => item.faction === faction);
-  const factionCards = [...rawFactionCards.filter((item) => item.tags.includes("v1-system")), ...rawFactionCards.filter((item) => !item.tags.includes("v1-system"))];
+  const factionCards = [
+    ...rawFactionCards.filter((item) => item.tags.includes("v12-position")),
+    ...rawFactionCards.filter((item) => item.tags.includes("v11-tactics")),
+    ...rawFactionCards.filter((item) => item.tags.includes("v1-system") && !item.tags.includes("v11-tactics") && !item.tags.includes("v12-position")),
+    ...rawFactionCards.filter((item) => !item.tags.includes("v1-system") && !item.tags.includes("v11-tactics") && !item.tags.includes("v12-position")),
+  ];
   const neutralCards = BASE_CARDS.filter((item) => item.faction === "neutral");
   const cardIds = [];
   for (const item of factionCards) cardIds.push(item.id, item.id, item.id);

@@ -572,16 +572,22 @@ h1 {
 }
 
 .hero-panel.legal-target,
-.board-card.legal-target {
+.board-card.legal-target,
+.empty-slot.legal-target {
   border-color: var(--gold);
   box-shadow: inset 0 0 0 2px var(--gold), 0 0 0 4px rgba(255, 209, 102, .18), 0 18px 48px rgba(0, 0, 0, .24);
   cursor: pointer;
 }
 
 .hero-panel.illegal-target,
-.board-card.illegal-target {
+.board-card.illegal-target,
+.empty-slot.illegal-target {
   filter: grayscale(.75);
   opacity: .46;
+}
+
+.board-card.blocked-target {
+  opacity: .54;
 }
 
 .stat-panel strong {
@@ -761,9 +767,31 @@ h1 {
 .board-row,
 .side-slots {
   display: grid;
-  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(2, minmax(122px, auto));
   gap: 10px;
   align-items: stretch;
+}
+
+.board-lane {
+  display: grid;
+  grid-template-columns: 52px repeat(3, minmax(112px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.lane-label {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 7px;
+  background: rgba(11, 16, 32, .42);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  writing-mode: vertical-rl;
+  letter-spacing: 0;
 }
 
 .side-slots {
@@ -966,6 +994,24 @@ h1 {
   margin: -2px 0 7px;
 }
 
+.tactical-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: -2px 0 7px;
+}
+
+.tactical-badges span {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--card-accent, #ffd166) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card-accent, #ffd166) 13%, rgba(255, 255, 255, .04));
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
 .status-badge {
   padding: 2px 6px;
   border: 1px solid rgba(255, 255, 255, .22);
@@ -1013,6 +1059,35 @@ h1 {
   padding-top: 28px;
 }
 
+.board-slot {
+  min-height: 124px;
+  border: 1px dashed color-mix(in srgb, var(--line) 86%, transparent);
+  border-radius: 7px;
+  background: rgba(11, 16, 32, .38);
+  color: var(--muted);
+}
+
+.empty-slot span {
+  display: grid;
+  place-items: center;
+  min-height: 100px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.slot-chip {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 999px;
+  background: rgba(11, 16, 32, .74);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
 .board-card .card-art,
 .board-card .faction-emblem,
 .board-card .rarity-mark {
@@ -1042,6 +1117,19 @@ h1 {
   border-color: var(--blue);
   transform: translateY(-4px);
   box-shadow: inset 0 0 0 2px var(--blue), 0 0 0 4px rgba(125, 211, 252, .18), 0 18px 48px rgba(0, 0, 0, .24);
+}
+
+.board-card.protects-backline {
+  box-shadow: inset 0 0 0 1px rgba(248, 250, 252, .28), 0 0 0 3px rgba(125, 211, 252, .1);
+}
+
+.board-card.protects-backline::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--card-primary, #7dd3fc) 58%, transparent);
+  border-radius: 7px;
 }
 
 .log-panel {
@@ -1173,7 +1261,11 @@ h1 {
   }
 
   .board-row {
-    grid-template-columns: repeat(5, minmax(92px, 1fr));
+    grid-template-columns: 1fr;
+  }
+
+  .board-lane {
+    grid-template-columns: 44px repeat(3, minmax(92px, 1fr));
   }
 }
 
@@ -1218,8 +1310,12 @@ h1 {
   }
 
   .board-row {
-    grid-template-columns: repeat(5, 132px);
+    grid-template-columns: 1fr;
     overflow-x: auto;
+  }
+
+  .board-lane {
+    grid-template-columns: 38px repeat(3, 118px);
   }
 
   .visual-event {

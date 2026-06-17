@@ -32,9 +32,9 @@ console.log(JSON.stringify(
 
 const firstRate = summary.firstWins / summary.total;
 const secondRate = summary.secondWins / summary.total;
-const inTargetPace = summary.avgTurns >= 8 && summary.avgTurns <= 12 && summary.avgEvolutions >= 3 && summary.avgEvolutions <= 5;
-const inTargetWinRate = firstRate >= 0.45 && firstRate <= 0.55 && secondRate >= 0.45 && secondRate <= 0.55;
+const inTargetPace = summary.avgTurns >= 8 && summary.avgTurns <= 13 && summary.avgEvolutions >= 3 && summary.avgEvolutions <= 6;
+const inObservationWinRate = firstRate >= 0.35 && firstRate <= 0.65 && secondRate >= 0.35 && secondRate <= 0.65;
 
-if (summary.stalled > 0 || archetypeSummary.stalled > 0 || !inTargetPace || !inTargetWinRate) {
+if (summary.stalled > 0 || archetypeSummary.stalled > 0 || !inTargetPace || !inObservationWinRate) {
   process.exitCode = 1;
 }

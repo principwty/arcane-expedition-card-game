@@ -47,7 +47,10 @@ let visualBusy = false;
 let visualProcessTimer = null;
 let currentTransaction = null;
 let transactionUid = 0;
-const SUPPORTED_KEYWORDS = new Set(["guard", "swift", "ward", "lifesteal", "overwhelm"]);
+const BOARD_ROWS = ["front", "back"];
+const BOARD_COLUMNS = [0, 1, 2];
+const BOARD_SLOT_IDS = BOARD_ROWS.flatMap((row) => BOARD_COLUMNS.map((column) => `${row}-${column}`));
+const SUPPORTED_KEYWORDS = new Set(["guard", "swift", "ward", "lifesteal", "overwhelm", "ranged", "vanguard", "support"]);
 const SUPPORTED_STATUSES = new Set(["silenced", "stunned", "cannotAttack", "deathrattleDisabled", "temporaryBuff"]);
 const PHASE_LABELS = {
   startTurn: "回合開始",
@@ -128,7 +131,9 @@ function cloneCard(template) {
     uid: `c${uid++}`,
     currentHealth: template.stats?.health ?? null,
     currentAttack: template.stats?.attack ?? null,
+    baseAttack: template.stats?.attack ?? null,
     shield: keywords.includes("ward"),
+    slotId: null,
     canAttack: false,
     attackedThisTurn: false,
   };
@@ -206,6 +211,154 @@ function createPlayer(kind, summonerId, recipe = null) {
 
 function buildDeckTemplates(summoner) {
   return buildDeckTemplatesFromRecipe(DEFAULT_DECK_RECIPES[summoner.id]);
+}
+
+function getBoardSlots(playerIndex) {
+  const player = state.players[playerIndex];
+  return BOARD_SLOT_IDS.map((slotId) => ({
+    slotId,
+    row: slotRow(slotId),
+    column: slotColumn(slotId),
+    minion: player.board.find((item) => item.slotId === slotId) ?? null,
+  }));
+}
+
+function getMinionAt(playerIndex, slotId) {
+  return state.players[playerIndex].board.find((item) => item.slotId === slotId) ?? null;
+}
+
+function slotRow(slotId) {
+  return String(slotId).split("-")[0];
+}
+
+function slotColumn(slotId) {
+  return Number(String(slotId).split("-")[1]);
+}
+
+function isFrontSlot(slotId) {
+  return slotRow(slotId) === "front";
+}
+
+function isBackSlot(slotId) {
+  return slotRow(slotId) === "back";
+}
+
+function isFrontline(minion) {
+  return isFrontSlot(minion?.slotId);
+}
+
+function isBackline(minion) {
+  return isBackSlot(minion?.slotId);
+}
+
+function adjacentSlots(slotId) {
+  const row = slotRow(slotId);
+  const column = slotColumn(slotId);
+  return BOARD_SLOT_IDS.filter((candidate) => {
+    const sameRowNextColumn = slotRow(candidate) === row && Math.abs(slotColumn(candidate) - column) === 1;
+    const sameColumnOtherRow = slotColumn(candidate) === column && slotRow(candidate) !== row;
+    return sameRowNextColumn || sameColumnOtherRow;
+  });
+}
+
+function adjacentMinions(playerIndex, slotId) {
+  const adjacent = new Set(adjacentSlots(slotId));
+  return state.players[playerIndex].board.filter((minion) => adjacent.has(minion.slotId));
+}
+
+function frontlineOpen(playerIndex) {
+  return BOARD_COLUMNS.some((column) => !getMinionAt(playerIndex, `front-${column}`));
+}
+
+function highestBacklineThreat(playerIndex) {
+  return backlineMinions(playerIndex).sort((a, b) => b.currentAttack - a.currentAttack || b.currentHealth - a.currentHealth)[0] ?? null;
+}
+
+function protectsBackline(minion) {
+  return !hasStatus(minion, "silenced") && minion?.effects?.some((effect) => effect.type === "protectBackline");
+}
+
+function hasBacklineProtection(playerIndex) {
+  return frontlineMinions(playerIndex).some(protectsBackline);
+}
+
+function legalSummonSlots(playerIndex, cardToSummon = null) {
+  const occupied = new Set(state.players[playerIndex].board.map((item) => item.slotId).filter(Boolean));
+  return BOARD_SLOT_IDS.filter((slotId) => !occupied.has(slotId));
+}
+
+function preferredSummonSlot(playerIndex, cardToSummon = null) {
+  const slots = legalSummonSlots(playerIndex, cardToSummon);
+  if (!slots.length) return null;
+  return [...slots].sort((a, b) => scoreSummonSlot(playerIndex, cardToSummon, b) - scoreSummonSlot(playerIndex, cardToSummon, a))[0];
+}
+
+function placeMinion(playerIndex, minion, slotId = null) {
+  const legal = legalSummonSlots(playerIndex, minion);
+  const finalSlot = legal.includes(slotId) ? slotId : preferredSummonSlot(playerIndex, minion);
+  if (!finalSlot) return false;
+  minion.slotId = finalSlot;
+  state.players[playerIndex].board.push(minion);
+  applyPositionBonuses(minion);
+  recordEvent(currentTransaction, "slotSelected", { label: slotLabel(finalSlot), detail: minion.name, tone: minion.faction, slotId: finalSlot });
+  return true;
+}
+
+function removePositionBonuses(minion) {
+  if (!minion || typeof minion.baseAttack !== "number") return;
+  minion.currentAttack = minion.baseAttack + (minion.attackModifiers ?? 0);
+}
+
+function applyPositionBonuses(minion) {
+  if (!minion || typeof minion.currentAttack !== "number") return;
+  if (typeof minion.baseAttack !== "number") minion.baseAttack = minion.currentAttack;
+  const before = minion.currentAttack;
+  removePositionBonuses(minion);
+  if (hasKeyword(minion, "vanguard") && isFrontSlot(minion.slotId)) minion.currentAttack += 1;
+  if (hasKeyword(minion, "support") && isBackSlot(minion.slotId)) minion.currentAttack += 1;
+  if (minion.currentAttack !== before) {
+    recordEvent(currentTransaction, "positionBonusApplied", { label: "站位加成", detail: minion.name, tone: minion.faction });
+  }
+}
+
+function frontlineMinions(playerIndex) {
+  return state.players[playerIndex].board.filter((item) => isFrontSlot(item.slotId));
+}
+
+function backlineMinions(playerIndex) {
+  return state.players[playerIndex].board.filter((item) => isBackSlot(item.slotId));
+}
+
+function scoreSummonSlot(playerIndex, cardToPlay, slotId) {
+  if (!slotId) return -999;
+  let score = 0;
+  const row = slotRow(slotId);
+  const opponentIndex = 1 - playerIndex;
+  const hasFront = frontlineMinions(playerIndex).length > 0;
+  const wantsBack =
+    cardToPlay?.rarity === "token" ||
+    hasKeyword(cardToPlay, "ranged") ||
+    hasKeyword(cardToPlay, "support") ||
+    cardToPlay?.effects?.some((effect) => ["spellPing", "spellDamageAura", "startTurnHeal", "startTurnBuffBeasts", "backlineBonus"].includes(effect.type));
+  const wantsFront =
+    hasKeyword(cardToPlay, "guard") ||
+    hasKeyword(cardToPlay, "vanguard") ||
+    cardToPlay?.effects?.some((effect) => ["protectBackline", "frontlineBonus", "breakthrough"].includes(effect.type));
+
+  if (row === "front") score += wantsFront ? 7 : 2;
+  if (row === "back") score += wantsBack ? 7 : hasFront ? 2 : -2;
+  if (row === "front" && !hasFront) score += 3;
+  if (row === "front" && highestBacklineThreat(playerIndex)) score += 2;
+  if (row === "front" && highestBacklineThreat(opponentIndex) && hasKeyword(cardToPlay, "guard")) score += 2;
+  if (row === "back" && hasBacklineProtection(playerIndex)) score += 2;
+  if (cardToPlay?.effects?.some((effect) => effect.type === "adjacentBuff")) score += adjacentSlots(slotId).filter((candidate) => getMinionAt(playerIndex, candidate)).length;
+  score -= Math.abs(slotColumn(slotId) - 1) * 0.2;
+  return score;
+}
+
+function slotLabel(slotId) {
+  const row = isFrontSlot(slotId) ? "前排" : "後排";
+  return `${row} ${slotColumn(slotId) + 1}`;
 }
 
 function startMatch(playerSummonerId, playerRecipe = null) {
@@ -364,14 +517,14 @@ function drawCards(playerIndex, amount) {
   checkGameOver();
 }
 
-function playCard(playerIndex, cardUid, target = null) {
+function playCard(playerIndex, cardUid, target = null, slotId = null) {
   if (state.gameOver || state.waitingForEvolution || state.active !== playerIndex) return;
   const player = state.players[playerIndex];
   const index = player.hand.findIndex((item) => item.uid === cardUid);
   if (index < 0) return;
   const played = player.hand[index];
   if (played.cost > player.mana) return;
-  if (played.type === "minion" && player.board.length >= 5) return;
+  if (played.type === "minion" && !legalSummonSlots(playerIndex, played).length) return;
   if (played.type === "artifact" && player.artifacts.length >= 2) return;
   const requiredTarget = getRequiredTarget(played);
   if (requiredTarget && !hasAnyLegalTarget(playerIndex, requiredTarget)) return;
@@ -383,16 +536,24 @@ function playCard(playerIndex, cardUid, target = null) {
     return;
   }
   if (requiredTarget && !isLegalTarget(playerIndex, requiredTarget, target)) return;
+  if (played.type === "minion" && !slotId) {
+    if (playerIndex !== 0) return;
+    state.pendingAction = { type: "summonSlot", playerIndex, cardUid, target };
+    log(`選擇 ${played.name} 的召喚格位。`);
+    render();
+    return;
+  }
+  if (played.type === "minion" && !legalSummonSlots(playerIndex, played).includes(slotId)) return;
   withTransaction("playCard", playerIndex, played, (transaction) => {
     player.hand.splice(index, 1);
     player.mana -= played.cost;
     state.pendingAction = null;
     recordEvent(transaction, "costPaid", { mana: played.cost, source: played.name });
-    recordEvent(transaction, "cardPlayed", { label: played.name, detail: TYPE_LABELS[played.type], tone: played.faction, cardId: played.id, target });
+    recordEvent(transaction, "cardPlayed", { label: played.name, detail: TYPE_LABELS[played.type], tone: played.faction, cardId: played.id, target, slotId });
     log(`${player.kind}使用了 ${played.name}。`);
 
     if (played.type === "minion") {
-      summonMinion(playerIndex, played, target);
+      summonMinion(playerIndex, played, target, slotId);
     } else if (played.type === "spell") {
       player.counters.spellsThisTurn += 1;
       triggerQuest(playerIndex, "spell", 1, played);
@@ -420,14 +581,14 @@ function playCard(playerIndex, cardUid, target = null) {
   render();
 }
 
-function summonMinion(playerIndex, minion, target = null) {
+function summonMinion(playerIndex, minion, target = null, slotId = null) {
   const player = state.players[playerIndex];
   if (minion.effects.some((effect) => effect.type === "buffIfArtifact") && player.artifacts.length) {
     minion.currentAttack += 1;
     minion.currentHealth += 1;
   }
   minion.canAttack = minion.stats.speed >= 2 || hasKeyword(minion, "swift");
-  player.board.push(minion);
+  if (!placeMinion(playerIndex, minion, slotId)) return;
   emitVisualEvent("summon", { label: minion.name, detail: hasKeyword(minion, "guard") ? "守護登場" : "召喚登場", tone: minion.faction });
   triggerQuest(playerIndex, "summon", 1, minion);
   if (minion.tags.includes("dragon")) triggerQuest(playerIndex, "dragonSummon", 1, minion);
@@ -502,6 +663,12 @@ function selectTarget(target) {
     if (!isLegalAttackTarget(action.playerIndex, target)) return;
     state.pendingAction = null;
     resolveAttack(action.playerIndex, action.attackerUid, target.type === "minion" ? target.uid : null);
+    render();
+  } else if (state.pendingAction.type === "summonSlot") {
+    const action = state.pendingAction;
+    if (target.type !== "slot" || target.ownerIndex !== action.playerIndex || !legalSummonSlots(action.playerIndex).includes(target.slotId)) return;
+    state.pendingAction = null;
+    playCard(action.playerIndex, action.cardUid, action.target, target.slotId);
     render();
   }
 }
@@ -588,6 +755,15 @@ function resolveEffects(playerIndex, effects, source, target = null) {
     if (effect.type === "buffAllIfArtifact" && state.players[playerIndex].artifacts.length) buffAll(playerIndex, effect.attack, effect.health);
     if (effect.type === "buffAlly") buffTarget(playerIndex, target, effect.attack, effect.health);
     if (effect.type === "buffAllyOrDraw") buffAllyOrDraw(playerIndex, effect.attack, effect.health);
+    if (effect.type === "adjacentBuff") adjacentBuff(playerIndex, target, source, effect.attack, effect.health);
+    if (effect.type === "frontlineBonus") frontlineBonus(playerIndex, source, effect);
+    if (effect.type === "backlineBonus") backlineBonus(playerIndex, source, effect);
+    if (effect.type === "protectBackline") {
+      // Passive positioning effect; enforced by legalAttackTargets.
+    }
+    if (effect.type === "breakthrough") {
+      // Passive attack effect; resolved by triggerBreakthrough.
+    }
     if (effect.type === "sacrificeDraw") sacrificeDraw(playerIndex, target);
     if (effect.type === "revive") reviveMinions(playerIndex, effect.amount);
     if (effect.type === "silenceMinion") {
@@ -633,6 +809,13 @@ function gainShield(target) {
     minion.shield = true;
     emitVisualEvent("shield", { label: "護盾", detail: minion.name, tone: "shield", target });
   }
+}
+
+function addMinionStats(minion, attack = 0, health = 0, label = "增益") {
+  if (!minion) return;
+  minion.currentAttack += attack;
+  minion.currentHealth += health;
+  recordEvent(currentTransaction, "statusApplied", { label, detail: minion.name, tone: minion.faction });
 }
 
 function gainShieldBestAlly(playerIndex) {
@@ -685,6 +868,9 @@ function silenceMinion(target) {
   if (!target || target.type !== "minion") return;
   const minion = state.players[target.ownerIndex].board.find((item) => item.uid === target.uid);
   if (!minion) return;
+  if ((hasKeyword(minion, "vanguard") && isFrontSlot(minion.slotId)) || (hasKeyword(minion, "support") && isBackSlot(minion.slotId))) {
+    minion.currentAttack = Math.max(0, minion.currentAttack - 1);
+  }
   addStatus(minion, "silenced");
   addStatus(minion, "deathrattleDisabled");
   minion.effects = [];
@@ -857,10 +1043,10 @@ function killMinion(ownerIndex, minionUid, source) {
 
 function summonToken(playerIndex, tokenId) {
   const player = state.players[playerIndex];
-  if (player.board.length >= 5) return;
+  if (!legalSummonSlots(playerIndex).length) return;
   const token = cloneCard(TOKENS[tokenId]);
   token.canAttack = false;
-  player.board.push(token);
+  if (!placeMinion(playerIndex, token, preferredSummonSlot(playerIndex, token))) return;
   emitVisualEvent("summon", { label: token.name, detail: "衍生物登場", tone: token.faction });
   triggerQuest(playerIndex, "summon", 1, token);
   if (token.tags.includes("dragon")) triggerQuest(playerIndex, "dragonSummon", 1, token);
@@ -939,10 +1125,10 @@ function reviveMinions(playerIndex, amount) {
   const player = state.players[playerIndex];
   const candidates = player.deadMinions.filter((item) => item.rarity !== "token").slice(-amount);
   for (const dead of candidates) {
-    if (player.board.length >= 5) return;
+    if (!legalSummonSlots(playerIndex).length) return;
     const revived = cloneCard(BASE_CARDS.concat(EVOLUTION_CARDS).find((item) => item.id === dead.id) || dead);
     revived.canAttack = false;
-    player.board.push(revived);
+    if (!placeMinion(playerIndex, revived, preferredSummonSlot(playerIndex, revived))) return;
     emitVisualEvent("summon", { label: revived.name, detail: "復活登場", tone: revived.faction });
   }
 }
@@ -951,8 +1137,7 @@ function buffRandomAlly(playerIndex, attack, health, exceptUid = null) {
   const player = state.players[playerIndex];
   const target = player.board.find((item) => item.uid !== exceptUid);
   if (!target) return;
-  target.currentAttack += attack;
-  target.currentHealth += health;
+  addMinionStats(target, attack, health, "友方增益");
 }
 
 function buffTarget(playerIndex, target, attack, health) {
@@ -962,8 +1147,7 @@ function buffTarget(playerIndex, target, attack, health) {
   }
   const minion = state.players[playerIndex].board.find((item) => item.uid === target.uid);
   if (!minion) return;
-  minion.currentAttack += attack;
-  minion.currentHealth += health;
+  addMinionStats(minion, attack, health, "指定增益");
 }
 
 function buffAllyOrDraw(playerIndex, attack, health) {
@@ -972,8 +1156,7 @@ function buffAllyOrDraw(playerIndex, attack, health) {
     drawCards(playerIndex, 1);
     return;
   }
-  target.currentAttack += attack;
-  target.currentHealth += health;
+  addMinionStats(target, attack, health, "鍛造增益");
 }
 
 function upgradeHeroPower(playerIndex, mode) {
@@ -984,9 +1167,36 @@ function upgradeHeroPower(playerIndex, mode) {
 
 function buffAll(playerIndex, attack, health) {
   state.players[playerIndex].board.forEach((minion) => {
-    minion.currentAttack += attack;
-    minion.currentHealth += health;
+    addMinionStats(minion, attack, health, "全體增益");
   });
+}
+
+function adjacentBuff(playerIndex, target, source, attack = 0, health = 0) {
+  const anchor =
+    target?.type === "minion" && target.ownerIndex === playerIndex
+      ? state.players[playerIndex].board.find((minion) => minion.uid === target.uid)
+      : state.players[playerIndex].board.find((minion) => minion.uid === source?.uid);
+  if (!anchor?.slotId) return;
+  const allies = adjacentMinions(playerIndex, anchor.slotId).filter((minion) => minion.uid !== anchor.uid);
+  for (const ally of allies) addMinionStats(ally, attack, health, "相鄰增益");
+  if (allies.length) {
+    recordEvent(currentTransaction, "positionBonusApplied", { label: "相鄰連鎖", detail: `${anchor.name} 影響 ${allies.length} 個友方`, tone: anchor.faction });
+  }
+}
+
+function frontlineBonus(playerIndex, source, effect) {
+  const minion = state.players[playerIndex].board.find((item) => item.uid === source?.uid);
+  if (!minion || !isFrontline(minion)) return;
+  addMinionStats(minion, effect.attack ?? 0, effect.health ?? 0, "前排加成");
+  if (effect.expedition) addExpedition(playerIndex, effect.expedition, source.name);
+}
+
+function backlineBonus(playerIndex, source, effect) {
+  const minion = state.players[playerIndex].board.find((item) => item.uid === source?.uid);
+  if (!minion || !isBackline(minion)) return;
+  addMinionStats(minion, effect.attack ?? 0, effect.health ?? 0, "後排加成");
+  if (effect.draw) drawCards(playerIndex, effect.draw);
+  if (effect.shield) gainShield({ type: "minion", ownerIndex: playerIndex, uid: minion.uid });
 }
 
 function attack(attackerUid, targetUid = null) {
@@ -1002,6 +1212,27 @@ function attack(attackerUid, targetUid = null) {
   state.pendingAction = null;
   resolveAttack(0, attackerUid, targetUid);
   render();
+}
+
+function legalAttackTargets(playerIndex, attackerUid) {
+  const attacker = state.players[playerIndex].board.find((item) => item.uid === attackerUid);
+  if (!attacker) return [];
+  const opponentIndex = 1 - playerIndex;
+  const opponent = state.players[opponentIndex];
+  const guard = opponent.board.find((item) => hasKeyword(item, "guard"));
+  if (guard) return [{ type: "minion", ownerIndex: opponentIndex, uid: guard.uid }];
+  const front = frontlineMinions(opponentIndex);
+  const targets = [];
+  if (front.length) {
+    targets.push(...front.map((minion) => ({ type: "minion", ownerIndex: opponentIndex, uid: minion.uid })));
+    if (hasKeyword(attacker, "ranged") && !hasBacklineProtection(opponentIndex)) {
+      targets.push(...backlineMinions(opponentIndex).map((minion) => ({ type: "minion", ownerIndex: opponentIndex, uid: minion.uid })));
+    }
+    return targets;
+  }
+  targets.push({ type: "hero", ownerIndex: opponentIndex });
+  targets.push(...opponent.board.map((minion) => ({ type: "minion", ownerIndex: opponentIndex, uid: minion.uid })));
+  return targets;
 }
 
 function resolveAttack(playerIndex, attackerUid, targetUid = null) {
@@ -1055,6 +1286,15 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
       targetUid = guard.uid;
       recordEvent(transaction, "targetChanged", { label: "守護強制目標", detail: guard.name, tone: "shield", targetUid });
     }
+    if (!guard) {
+      const legalTargets = legalAttackTargets(playerIndex, attackerUid);
+      const requestedTarget = targetUid ? { type: "minion", ownerIndex: 1 - playerIndex, uid: targetUid } : { type: "hero", ownerIndex: 1 - playerIndex };
+      if (!legalTargets.some((target) => target.type === requestedTarget.type && target.uid === requestedTarget.uid)) {
+        const fallback = legalTargets[0];
+        recordEvent(transaction, "attackBlockedByFrontline", { label: "前排阻擋", detail: attacker.name, tone: "shield" });
+        targetUid = fallback?.type === "minion" ? fallback.uid : null;
+      }
+    }
 
     triggerFirstAttackBuff(playerIndex, attacker);
     const bonus = artifactAttackBonus(playerIndex);
@@ -1067,8 +1307,10 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
       if (!target) return;
       const hadShield = target.shield;
       const beforeHealth = target.currentHealth;
+      const targetSlotId = target.slotId;
       damageMinion(1 - playerIndex, target.uid, totalAttack, attacker);
       damageMinion(playerIndex, attacker.uid, target.currentAttack, target);
+      triggerBreakthrough(playerIndex, attacker, targetSlotId);
       if (!hadShield && hasKeyword(attacker, "overwhelm") && totalAttack > beforeHealth) damageHero(1 - playerIndex, totalAttack - beforeHealth, playerIndex);
       if (attacker.currentHealth <= 0) killMinion(playerIndex, attacker.uid, target);
     } else {
@@ -1089,13 +1331,19 @@ function resolveAttack(playerIndex, attackerUid, targetUid = null) {
   });
 }
 
-function isLegalAttackTarget(playerIndex, target) {
+function triggerBreakthrough(playerIndex, attacker, targetSlotId) {
+  if (!attacker || !targetSlotId || !state.players[playerIndex].board.some((item) => item.uid === attacker.uid)) return;
+  const effect = attacker.effects.find((item) => item.type === "breakthrough");
+  if (!effect || hasStatus(attacker, "silenced") || !isFrontSlot(targetSlotId)) return;
+  const behind = getMinionAt(1 - playerIndex, `back-${slotColumn(targetSlotId)}`);
+  if (!behind) return;
+  damageMinion(1 - playerIndex, behind.uid, effect.amount, attacker);
+}
+
+function isLegalAttackTarget(playerIndex, target, attackerUid = state.pendingAction?.type === "attackTarget" ? state.pendingAction.attackerUid : null) {
   if (!target || target.ownerIndex !== 1 - playerIndex) return false;
-  const opponent = state.players[1 - playerIndex];
-  const guard = opponent.board.find((item) => hasKeyword(item, "guard"));
-  if (guard) return target.type === "minion" && target.uid === guard.uid;
-  if (target.type === "hero") return true;
-  return target.type === "minion" && opponent.board.some((item) => item.uid === target.uid);
+  if (!attackerUid) return false;
+  return legalAttackTargets(playerIndex, attackerUid).some((legal) => legal.type === target.type && legal.ownerIndex === target.ownerIndex && legal.uid === target.uid);
 }
 
 function artifactAttackBonus(playerIndex) {
@@ -1241,7 +1489,7 @@ function runAiActions(playerIndex) {
     acted = false;
     const play = chooseAiPlay(playerIndex);
     if (play) {
-      playCard(playerIndex, play.card.uid, play.target);
+      playCard(playerIndex, play.card.uid, play.target, play.slotId);
       acted = true;
     }
   }
@@ -1287,16 +1535,23 @@ function chooseAiPlay(playerIndex = 1) {
   const ai = state.players[playerIndex];
   const candidates = ai.hand
     .filter((item) => canPlayCard(playerIndex, item))
-    .map((item) => ({ card: item, target: chooseAiTargetForCard(playerIndex, item), score: scoreAiCard(playerIndex, item) }))
+    .map((item) => ({ card: item, target: chooseAiTargetForCard(playerIndex, item), slotId: item.type === "minion" ? chooseAiSummonSlot(playerIndex, item) : null, score: scoreAiCard(playerIndex, item) }))
     .filter((item) => !getRequiredTarget(item.card) || item.target)
+    .filter((item) => item.card.type !== "minion" || item.slotId)
     .sort((a, b) => b.score - a.score || b.card.cost - a.card.cost);
   return candidates[0] ?? null;
+}
+
+function chooseAiSummonSlot(playerIndex, cardToPlay) {
+  const slots = legalSummonSlots(playerIndex, cardToPlay);
+  if (!slots.length) return null;
+  return [...slots].sort((a, b) => scoreSummonSlot(playerIndex, cardToPlay, b) - scoreSummonSlot(playerIndex, cardToPlay, a))[0];
 }
 
 function canPlayCard(playerIndex, cardToPlay) {
   const player = state.players[playerIndex];
   if (cardToPlay.cost > player.mana) return false;
-  if (cardToPlay.type === "minion" && player.board.length >= 5) return false;
+  if (cardToPlay.type === "minion" && !legalSummonSlots(playerIndex, cardToPlay).length) return false;
   if (cardToPlay.type === "artifact" && player.artifacts.length >= 2) return false;
   return true;
 }
@@ -1312,6 +1567,10 @@ function scoreAiCard(playerIndex, cardToScore) {
   if (cardToScore.effects.some((effect) => effect.type === "healHero" || effect.type === "healTarget") && player.hp <= 15) score += 4;
   if (cardToScore.effects.some((effect) => effect.type === "expedition") && player.expedition < nextEvolutionThreshold(player)) score += 2;
   if (cardToScore.effects.some((effect) => effect.type === "destroyArtifact") && opponent.artifacts.length) score += 4;
+  if (cardToScore.effects.some((effect) => ["adjacentBuff", "frontlineBonus", "backlineBonus", "protectBackline", "breakthrough"].includes(effect.type))) score += 2;
+  if (cardToScore.effects.some((effect) => effect.type === "protectBackline") && highestBacklineThreat(playerIndex)) score += 4;
+  if (cardToScore.effects.some((effect) => effect.type === "breakthrough") && highestBacklineThreat(1 - playerIndex)) score += 3;
+  if (hasKeyword(cardToScore, "ranged") && backlineMinions(1 - playerIndex).length) score += 2;
   return score;
 }
 
@@ -1328,6 +1587,8 @@ function chooseAiTargetForCard(playerIndex, cardToPlay) {
       .filter((item) => item.currentHealth <= damage)
       .sort((a, b) => b.currentAttack - a.currentAttack || b.currentHealth - a.currentHealth)[0];
     if (killable && (killable.currentAttack >= 4 || state.players[playerIndex].hp <= 12)) return { type: "minion", ownerIndex: 1 - playerIndex, uid: killable.uid };
+    const backlineThreat = highestBacklineThreat(1 - playerIndex);
+    if (backlineThreat && backlineThreat.currentAttack >= 3 && damage >= backlineThreat.currentHealth) return { type: "minion", ownerIndex: 1 - playerIndex, uid: backlineThreat.uid };
     const threat = [...opponent.board].sort((a, b) => b.currentAttack - a.currentAttack)[0];
     if (state.players[playerIndex].hp <= 12 && threat) return { type: "minion", ownerIndex: 1 - playerIndex, uid: threat.uid };
     return { type: "hero", ownerIndex: 1 - playerIndex };
@@ -1376,18 +1637,26 @@ function spellDamageBonusPreview(playerIndex, source) {
 
 function chooseAiAttackTarget(playerIndex, attacker) {
   const opponent = state.players[1 - playerIndex];
-  if (opponent.hp <= attacker.currentAttack + artifactAttackBonus(playerIndex)) return { type: "hero" };
+  const legalTargets = legalAttackTargets(playerIndex, attacker.uid);
+  const canHitHero = legalTargets.some((target) => target.type === "hero");
+  if (canHitHero && opponent.hp <= attacker.currentAttack + artifactAttackBonus(playerIndex)) return { type: "hero" };
   const guard = opponent.board.find((item) => hasKeyword(item, "guard"));
   if (guard) return { type: "minion", uid: guard.uid };
+  const legalMinionUids = new Set(legalTargets.filter((target) => target.type === "minion").map((target) => target.uid));
+  if (canHitHero && state.players[playerIndex].hp > 12 && (attacker.currentAttack >= 3 || boardAttack(state.players[playerIndex]) >= boardAttack(opponent))) return { type: "hero" };
+  const backlineThreat = highestBacklineThreat(1 - playerIndex);
+  if (backlineThreat && legalMinionUids.has(backlineThreat.uid) && backlineThreat.currentAttack >= 3) return { type: "minion", uid: backlineThreat.uid };
   const killable = [...opponent.board]
+    .filter((item) => legalMinionUids.has(item.uid))
     .filter((item) => item.currentHealth <= attacker.currentAttack)
     .sort((a, b) => b.currentAttack - a.currentAttack || b.currentHealth - a.currentHealth)[0];
   if (killable && (killable.currentAttack >= 4 || state.players[playerIndex].hp <= 12)) return { type: "minion", uid: killable.uid };
   if (state.players[playerIndex].hp <= 12) {
-    const threat = [...opponent.board].sort((a, b) => b.currentAttack - a.currentAttack)[0];
+    const threat = [...opponent.board].filter((item) => legalMinionUids.has(item.uid)).sort((a, b) => b.currentAttack - a.currentAttack)[0];
     if (threat) return { type: "minion", uid: threat.uid };
   }
-  return { type: "hero" };
+  const bestMinion = [...opponent.board].filter((item) => legalMinionUids.has(item.uid)).sort((a, b) => b.currentAttack - a.currentAttack || b.currentHealth - a.currentHealth)[0];
+  return canHitHero ? { type: "hero" } : { type: "minion", uid: bestMinion?.uid };
 }
 
 function checkGameOver() {
@@ -1517,6 +1786,14 @@ function buildVisualTimeline(transaction) {
   if (first) {
     const type = first.type === "cardPlayed" ? "playCard" : first.type === "heroPowerUsed" ? "heroPower" : "attack";
     pushStep(type, first.payload.label ?? eventLabel(type), first.payload.detail ?? "", first.payload.tone ?? transaction.source?.faction);
+  }
+
+  const position = events.filter((event) => ["slotSelected", "positionBonusApplied", "attackBlockedByFrontline"].includes(event.type));
+  if (position.length) {
+    const blocked = position.find((event) => event.type === "attackBlockedByFrontline");
+    const label = blocked ? blocked.payload.label : position[0].payload.label ?? "站位";
+    const detail = position.map((event) => event.payload.detail || event.payload.label).filter(Boolean).join("、");
+    pushStep(blocked ? "shield" : "quest", label, detail, blocked ? "shield" : "status", position);
   }
 
   const secrets = events.filter((event) => ["secretTriggered", "targetChanged"].includes(event.type));
@@ -1696,6 +1973,7 @@ function currentActionHint() {
   if (!state) return "準備遠征";
   if (state.waitingForEvolution) return "進化突破：選擇一張牌";
   if (state.pendingAction?.type === "attackTarget") return "選擇攻擊目標";
+  if (state.pendingAction?.type === "summonSlot") return "選擇召喚格位";
   if (state.pendingAction?.type === "heroPowerTarget") return "選擇召喚師技能目標";
   if (state.pendingAction?.type === "cardTarget") return "選擇卡牌目標";
   if (state.gameOver) return "對局結束";
@@ -1920,22 +2198,36 @@ function renderPlayerArea(container, player, isOpponent = false) {
 
 function renderBoard(container, player, ownerIndex) {
   container.innerHTML = "";
-  for (const minion of player.board) {
-    const node = document.createElement("button");
-    node.className = `card board-card minion ${getMinionClasses(ownerIndex, minion)}`;
-    node.setAttribute("style", cardVisualStyle(minion));
-    node.innerHTML = boardMarkup(minion);
-    if (isPendingMinionTarget(ownerIndex, minion)) {
-      node.addEventListener("click", () => selectTarget({ type: "minion", ownerIndex, uid: minion.uid }));
-    } else if (ownerIndex === 0 && minion.canAttack && !state.pendingAction) {
-      node.addEventListener("click", () => attack(minion.uid));
-    } else if (ownerIndex === 1 && !state.pendingAction) {
-      node.addEventListener("click", () => {
-        const attacker = state.players[0].board.find((item) => item.canAttack && !item.attackedThisTurn);
-        if (attacker) attack(attacker.uid, minion.uid);
-      });
+  for (const row of BOARD_ROWS) {
+    const rowNode = document.createElement("div");
+    rowNode.className = `board-lane ${row}`;
+    rowNode.innerHTML = `<div class="lane-label">${row === "front" ? "前排" : "後排"}</div>`;
+    for (const slot of getBoardSlots(ownerIndex).filter((item) => item.row === row)) {
+      const node = document.createElement("button");
+      const minion = slot.minion;
+      if (minion) {
+        node.className = `card board-card minion ${getMinionClasses(ownerIndex, minion)}`;
+        node.setAttribute("style", cardVisualStyle(minion));
+        node.innerHTML = boardMarkup(minion);
+        if (isPendingMinionTarget(ownerIndex, minion)) {
+          node.addEventListener("click", () => selectTarget({ type: "minion", ownerIndex, uid: minion.uid }));
+        } else if (ownerIndex === 0 && minion.canAttack && !state.pendingAction) {
+          node.addEventListener("click", () => attack(minion.uid));
+        } else if (ownerIndex === 1 && !state.pendingAction) {
+          node.addEventListener("click", () => {
+            const attacker = state.players[0].board.find((item) => item.canAttack && !item.attackedThisTurn && isLegalAttackTarget(0, { type: "minion", ownerIndex, uid: minion.uid }, item.uid));
+            if (attacker) attack(attacker.uid, minion.uid);
+          });
+        }
+      } else {
+        const legalSlot = isPendingSummonSlot(ownerIndex, slot.slotId);
+        node.className = `board-slot empty-slot ${row} ${legalSlot ? "legal-target" : state.pendingAction?.type === "summonSlot" ? "illegal-target" : ""}`;
+        node.innerHTML = `<span>${slotLabel(slot.slotId)}</span>`;
+        if (legalSlot) node.addEventListener("click", () => selectTarget({ type: "slot", ownerIndex, slotId: slot.slotId }));
+      }
+      rowNode.append(node);
     }
-    container.append(node);
+    container.append(rowNode);
   }
 }
 
@@ -1974,6 +2266,8 @@ function renderMetrics() {
   const pendingText = state.pendingAction
     ? state.pendingAction.type === "attackTarget"
       ? "選擇攻擊目標"
+      : state.pendingAction.type === "summonSlot"
+        ? "選擇召喚格位"
       : "選擇卡牌目標"
     : state.active === 0
       ? `玩家回合 · ${phaseText}`
@@ -2012,13 +2306,22 @@ function isPendingMinionTarget(ownerIndex, minion) {
   return false;
 }
 
+function isPendingSummonSlot(ownerIndex, slotId) {
+  if (state.pendingAction?.type !== "summonSlot") return false;
+  return state.pendingAction.playerIndex === ownerIndex && legalSummonSlots(ownerIndex).includes(slotId);
+}
+
 function getMinionClasses(ownerIndex, minion) {
   const classes = [];
   if (ownerIndex === 0 && minion.canAttack && !minion.attackedThisTurn && !state.pendingAction) classes.push("can-attack");
   if (state.pendingAction?.type === "attackTarget" && state.pendingAction.attackerUid === minion.uid) classes.push("selected-attacker");
   if (isPendingMinionTarget(ownerIndex, minion)) classes.push("legal-target");
+  else if (state.pendingAction?.type === "attackTarget" && ownerIndex === 1) classes.push("blocked-target");
   else if (state.pendingAction) classes.push("illegal-target");
   for (const status of minion.statuses ?? []) classes.push(`status-${status}`);
+  if (isFrontSlot(minion.slotId)) classes.push("in-front");
+  if (isBackSlot(minion.slotId)) classes.push("in-back");
+  if (protectsBackline(minion)) classes.push("protects-backline");
   return classes.join(" ");
 }
 
@@ -2047,12 +2350,23 @@ function boardMarkup(item) {
   const theme = themeFor(item.faction);
   return `
     <img class="board-emblem" src="${theme.emblem}" alt="" />
+    <div class="slot-chip">${slotLabel(item.slotId)}</div>
     <h4>${item.name}</h4>
     ${keywordMarkup(keywordsOf(item), item.shield)}
+    ${tacticalBadgeMarkup(item)}
     ${statusMarkup(item)}
     <div class="text">${item.text}</div>
     <div class="stats"><span>攻 ${item.currentAttack}</span><span>速 ${item.stats.speed}</span><span>命 ${item.currentHealth}</span></div>
   `;
+}
+
+function tacticalBadgeMarkup(item) {
+  const badges = [];
+  if (protectsBackline(item)) badges.push("保護後排");
+  if (item.effects?.some((effect) => effect.type === "breakthrough")) badges.push("突破");
+  if (item.effects?.some((effect) => effect.type === "adjacentBuff")) badges.push("相鄰連鎖");
+  if (!badges.length) return "";
+  return `<div class="tactical-badges">${badges.map((badge) => `<span>${badge}</span>`).join("")}</div>`;
 }
 
 function keywordMarkup(tags = [], shield = false) {
@@ -2086,6 +2400,9 @@ function keywordHelp(word) {
     "護盾": "抵銷下一次受到的傷害。",
     "吸血": "造成傷害後為控制者恢復生命。",
     "踐踏": "攻擊召喚物時，溢出傷害會打到敵方英雄。",
+    "遠程": "可越過前排攻擊後排召喚物。",
+    "先鋒": "在前排時獲得 +1 攻擊。",
+    "支援": "在後排時獲得 +1 攻擊。",
   };
   return help[word] ?? word;
 }

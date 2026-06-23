@@ -2535,28 +2535,59 @@ function average(values) {
 
 function renderHelpContent() {
   if (!els.helpContent) return;
+  const helpSections = HELP_SECTIONS.map((section, index) => ({
+    id: `help-${index + 1}`,
+    title: section.title,
+    items: section.items,
+  }));
   els.helpContent.innerHTML = `
-    <div class="help-section">
-      <h3>快速總覽</h3>
-      <p>《奧術遠征》是一款 1v1 奇幻卡牌對戰遊戲。先把對手英雄打到 0 生命就能獲勝。</p>
-    </div>
-    <div class="help-grid">
-      ${HELP_SECTIONS.map(
-        (section) => `
-          <section class="help-section">
-            <h3>${section.title}</h3>
-            <ul>${section.items.map((item) => `<li>${item}</li>`).join("")}</ul>
-          </section>
-        `,
-      ).join("")}
-    </div>
-    <div class="help-section">
-      <h3>記住這三件事</h3>
-      <ul>
-        <li>先看法力，再看目標合法性。</li>
-        <li>前排會擋住後排，守護會優先被處理。</li>
-        <li>遠征軌到節點時，記得從三張進化牌中選一張。</li>
-      </ul>
+    <div class="help-shell">
+      <aside class="help-sidebar">
+        <p class="eyebrow">遊戲幫助</p>
+        <h3>奧術遠征規則</h3>
+        <p class="help-lead">短版規則總覽，適合在對局中快速查閱。</p>
+        <div class="help-stats">
+          <div class="help-stat"><strong>30</strong><span>主牌組</span></div>
+          <div class="help-stat"><strong>6</strong><span>戰場格位</span></div>
+          <div class="help-stat"><strong>3</strong><span>進化選牌</span></div>
+        </div>
+        <nav class="help-toc" aria-label="幫助目錄">
+          ${helpSections.map((section) => `<a href="#${section.id}">${section.title}</a>`).join("")}
+          <a href="#help-tips">記住這三件事</a>
+        </nav>
+      </aside>
+      <div class="help-main">
+        <section class="help-hero">
+          <h3>快速總覽</h3>
+          <p>《奧術遠征》是一款 1v1 奇幻卡牌對戰遊戲。先把對手英雄打到 0 生命就能獲勝。</p>
+        </section>
+        <div class="help-grid">
+          ${helpSections
+            .map(
+              (section, index) => `
+                <section id="${section.id}" class="help-section">
+                  <div class="help-section-head">
+                    <span class="help-index">0${index + 1}</span>
+                    <h4>${section.title}</h4>
+                  </div>
+                  <ul>${section.items.map((item) => `<li>${item}</li>`).join("")}</ul>
+                </section>
+              `,
+            )
+            .join("")}
+        </div>
+        <section id="help-tips" class="help-section help-tips">
+          <div class="help-section-head">
+            <span class="help-index">10</span>
+            <h4>記住這三件事</h4>
+          </div>
+          <ul>
+            <li>先看法力，再看目標合法性。</li>
+            <li>前排會擋住後排，守護會優先被處理。</li>
+            <li>遠征軌到節點時，記得從三張進化牌中選一張。</li>
+          </ul>
+        </section>
+      </div>
     </div>
   `;
 }

@@ -15,6 +15,9 @@
             <p class="eyebrow">1v1 牌組進化卡牌原型</p>
             <h1>奧術遠征</h1>
             <p class="intro">選擇召喚師，在 10-15 分鐘的奇幻對戰中推進遠征軌，從三張進化牌中抉擇，讓你的牌組在戰局內成長。</p>
+            <div class="start-actions">
+              <button id="startHelpBtn" class="button secondary" type="button">遊戲幫助</button>
+            </div>
           </div>
         </div>
         <div id="summonerGrid" class="summoner-grid"></div>
@@ -28,6 +31,7 @@
           </div>
           <div class="topbar-actions">
             <button id="backToSummonersBtn" class="button secondary">返回召喚師</button>
+            <button id="builderHelpBtn" class="button secondary" type="button">遊戲幫助</button>
             <button id="startCustomBtn" class="button primary">使用此牌組開局</button>
           </div>
         </header>
@@ -126,6 +130,7 @@
                 <option value="full">完整</option>
               </select>
             </label>
+            <button id="gameHelpBtn" class="button secondary" type="button">遊戲幫助</button>
             <button id="deployBtn" class="button secondary">部署 1</button>
             <button id="simulateBtn" class="button secondary">模擬 50 場</button>
             <button id="newGameBtn" class="button secondary">新對局</button>
@@ -170,6 +175,19 @@
           <h2 id="resultTitle">勝利</h2>
           <p id="resultText"></p>
           <button id="resultNewGameBtn" class="button primary">再來一局</button>
+        </div>
+      </div>
+
+      <div id="helpModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+        <div class="modal-panel help-panel">
+          <div class="modal-heading">
+            <p class="eyebrow">遊戲幫助</p>
+            <h2 id="helpTitle">奧術遠征規則</h2>
+          </div>
+          <div id="helpContent" class="help-content"></div>
+          <div class="help-actions">
+            <button id="helpCloseBtn" class="button primary" type="button">關閉</button>
+          </div>
         </div>
       </div>
     </main>

@@ -41,6 +41,44 @@ const ANIMATION_SETTINGS = {
   durations: { normal: 320, fast: 130, off: 0 },
   maxSteps: { compact: 3, standard: 5, full: 6 },
 };
+const HELP_SECTIONS = [
+  {
+    title: "目標",
+    items: ["先把對手英雄打到 0 生命。", "你的英雄生命歸零時，你會輸掉對局。"],
+  },
+  {
+    title: "回合流程",
+    items: ["每回合開始時，法力上限 +1。", "法力每回合回滿。", "先出牌，再攻擊，最後結束回合。"],
+  },
+  {
+    title: "卡牌類型",
+    items: ["召喚物：留在戰場上作戰。", "法術：立即結算效果。", "秘儀：在對手回合自動觸發。", "遺物：持續提供場上效果。"],
+  },
+  {
+    title: "戰場與站位",
+    items: ["每方戰場分成前排與後排。", "每排 3 格，共 6 格。", "有些效果只看站位。"],
+  },
+  {
+    title: "攻擊與目標",
+    items: ["一般近戰不能越過前排直接打後排或英雄。", "守護單位會優先被攻擊。", "若牌面寫有目標需求，必須先選合法目標。"],
+  },
+  {
+    title: "關鍵字",
+    items: ["守護：敵方會優先攻擊它。", "護盾：先擋一次傷害。", "遠程：可越過前排攻擊後排。", "先鋒：在前排時更強。", "支援：在後排時有加成。"],
+  },
+  {
+    title: "部署",
+    items: ["部署用來移動自己的召喚物。", "先選友方單位，再選目標格位。", "部署可觸發部分卡牌效果。"],
+  },
+  {
+    title: "遠征與進化",
+    items: ["對局中可推進遠征軌。", "到達節點時，從 3 張進化牌中選 1 張。", "進化分為強化、發現、覺醒。"],
+  },
+  {
+    title: "召喚師與構築",
+    items: ["每位召喚師都有專屬技能。", "構築牌組固定 30 張。", "只能放同陣營與中立卡。"],
+  },
+];
 let animationSpeed = "normal";
 let animationDetail = "standard";
 let visualQueue = [];
@@ -118,6 +156,12 @@ const els = hasDom
       resultTitle: document.querySelector("#resultTitle"),
       resultText: document.querySelector("#resultText"),
       resultNewGame: document.querySelector("#resultNewGameBtn"),
+      helpModal: document.querySelector("#helpModal"),
+      helpContent: document.querySelector("#helpContent"),
+      helpClose: document.querySelector("#helpCloseBtn"),
+      startHelp: document.querySelector("#startHelpBtn"),
+      builderHelp: document.querySelector("#builderHelpBtn"),
+      gameHelp: document.querySelector("#gameHelpBtn"),
     }
   : {};
 
@@ -604,6 +648,7 @@ function startMatch(playerSummonerId, playerRecipe = null) {
   state.players[1].hp = 30;
   state.players[1].hand.push(cloneCard(COIN_CARD), cloneCard(SECOND_SUPPLY_CARD));
   startTurn(0);
+  closeHelp();
   els.start.classList.add("hidden");
   els.builderScreen.classList.add("hidden");
   els.game.classList.remove("hidden");
@@ -2488,6 +2533,43 @@ function average(values) {
   return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 }
 
+function renderHelpContent() {
+  if (!els.helpContent) return;
+  els.helpContent.innerHTML = `
+    <div class="help-section">
+      <h3>快速總覽</h3>
+      <p>《奧術遠征》是一款 1v1 奇幻卡牌對戰遊戲。先把對手英雄打到 0 生命就能獲勝。</p>
+    </div>
+    <div class="help-grid">
+      ${HELP_SECTIONS.map(
+        (section) => `
+          <section class="help-section">
+            <h3>${section.title}</h3>
+            <ul>${section.items.map((item) => `<li>${item}</li>`).join("")}</ul>
+          </section>
+        `,
+      ).join("")}
+    </div>
+    <div class="help-section">
+      <h3>記住這三件事</h3>
+      <ul>
+        <li>先看法力，再看目標合法性。</li>
+        <li>前排會擋住後排，守護會優先被處理。</li>
+        <li>遠征軌到節點時，記得從三張進化牌中選一張。</li>
+      </ul>
+    </div>
+  `;
+}
+
+function openHelp() {
+  renderHelpContent();
+  els.helpModal?.classList.remove("hidden");
+}
+
+function closeHelp() {
+  els.helpModal?.classList.add("hidden");
+}
+
 function render() {
   if (!state || state.simulating) return;
   const [player, opponent] = state.players;
@@ -2847,6 +2929,7 @@ function openBuilder(summonerId, deckId = null) {
   els.builderTag.value = "all";
   const candidate = deckId ? findDeck(deckId) : defaultDeckRecipe(summonerId);
   loadBuilderRecipe(candidate?.summonerId === summonerId ? candidate : defaultDeckRecipe(summonerId));
+  closeHelp();
   els.start.classList.add("hidden");
   els.game.classList.add("hidden");
   els.builderScreen.classList.remove("hidden");
@@ -3127,6 +3210,18 @@ function initBrowserGame() {
   setAnimationDetail(loadAnimationDetail());
   els.animationSpeed.addEventListener("change", () => setAnimationSpeed(els.animationSpeed.value));
   els.animationDetail.addEventListener("change", () => setAnimationDetail(els.animationDetail.value));
+  [els.startHelp, els.builderHelp, els.gameHelp].filter(Boolean).forEach((button) => {
+    button.addEventListener("click", openHelp);
+  });
+  els.helpClose?.addEventListener("click", closeHelp);
+  els.helpModal?.addEventListener("click", (event) => {
+    if (event.target === els.helpModal) closeHelp();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && els.helpModal && !els.helpModal.classList.contains("hidden")) {
+      closeHelp();
+    }
+  });
   els.deploy?.addEventListener("click", () => {
     if (state?.pendingAction?.type === "deploySource" || state?.pendingAction?.type === "deploySlot") {
       state.pendingAction = null;

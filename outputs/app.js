@@ -11,6 +11,7 @@ import {
   FACTION_LABELS,
   KEYWORD_LABELS,
   QUEST_LINES,
+  TACTICAL_OBJECTIVES,
   SECOND_SUPPLY_CARD,
   SUMMONERS,
   TOKENS,
@@ -110,6 +111,7 @@ const els = hasDom
       endTurn: document.querySelector("#endTurnBtn"),
       newGame: document.querySelector("#newGameBtn"),
       simulate: document.querySelector("#simulateBtn"),
+      deploy: document.querySelector("#deployBtn"),
       evoModal: document.querySelector("#evolutionModal"),
       evoChoices: document.querySelector("#evolutionChoices"),
       resultModal: document.querySelector("#resultModal"),
@@ -136,6 +138,7 @@ function cloneCard(template) {
     slotId: null,
     canAttack: false,
     attackedThisTurn: false,
+    positionAttackBonus: 0,
   };
 }
 
@@ -167,6 +170,7 @@ function createPlayer(kind, summonerId, recipe = null) {
   const summoner = SUMMONERS.find((item) => item.id === summonerId);
   const normalizedRecipe = recipe ? normalizeDeckRecipe(recipe) : defaultDeckRecipe(summonerId);
   const quest = QUEST_LINES.find((item) => item.id === normalizedRecipe.questId) ?? questsForSummoner(summonerId)[0];
+  const tacticalObjective = chooseTacticalObjective(summonerId, normalizedRecipe);
   const deckTemplates = recipe ? buildDeckTemplatesFromRecipe(normalizedRecipe) : buildDeckTemplates(summoner);
   return {
     kind,
@@ -191,7 +195,11 @@ function createPlayer(kind, summonerId, recipe = null) {
     questId: quest?.id ?? "",
     questProgress: 0,
     questCompleted: false,
+    tacticalObjectiveId: tacticalObjective?.id ?? "",
+    tacticalObjectiveProgress: 0,
+    tacticalObjectiveCompleted: false,
     heroPowerUsed: false,
+    deploymentUsed: false,
     awakenedPowers: [],
     counters: {
       spellsThisTurn: 0,
@@ -205,6 +213,8 @@ function createPlayer(kind, summonerId, recipe = null) {
       dragonBonusUsed: false,
       deathExpeditionUsed: false,
       beastHealUsed: false,
+      tacticalObjectivesCompleted: 0,
+      deploymentsThisGame: 0,
     },
   };
 }
@@ -287,6 +297,12 @@ function legalSummonSlots(playerIndex, cardToSummon = null) {
   return BOARD_SLOT_IDS.filter((slotId) => !occupied.has(slotId));
 }
 
+function legalDeploymentSlots(playerIndex, sourceUid = null) {
+  const source = state.players[playerIndex].board.find((item) => item.uid === sourceUid);
+  if (!source) return [];
+  return BOARD_SLOT_IDS.filter((slotId) => slotId !== source.slotId);
+}
+
 function preferredSummonSlot(playerIndex, cardToSummon = null) {
   const slots = legalSummonSlots(playerIndex, cardToSummon);
   if (!slots.length) return null;
@@ -306,17 +322,21 @@ function placeMinion(playerIndex, minion, slotId = null) {
 
 function removePositionBonuses(minion) {
   if (!minion || typeof minion.baseAttack !== "number") return;
-  minion.currentAttack = minion.baseAttack + (minion.attackModifiers ?? 0);
+  minion.currentAttack -= minion.positionAttackBonus ?? 0;
+  minion.positionAttackBonus = 0;
 }
 
 function applyPositionBonuses(minion) {
   if (!minion || typeof minion.currentAttack !== "number") return;
   if (typeof minion.baseAttack !== "number") minion.baseAttack = minion.currentAttack;
-  const before = minion.currentAttack;
   removePositionBonuses(minion);
+  let bonus = 0;
   if (hasKeyword(minion, "vanguard") && isFrontSlot(minion.slotId)) minion.currentAttack += 1;
   if (hasKeyword(minion, "support") && isBackSlot(minion.slotId)) minion.currentAttack += 1;
-  if (minion.currentAttack !== before) {
+  bonus += hasKeyword(minion, "vanguard") && isFrontSlot(minion.slotId) ? 1 : 0;
+  bonus += hasKeyword(minion, "support") && isBackSlot(minion.slotId) ? 1 : 0;
+  minion.positionAttackBonus = bonus;
+  if (bonus) {
     recordEvent(currentTransaction, "positionBonusApplied", { label: "站位加成", detail: minion.name, tone: minion.faction });
   }
 }
@@ -359,6 +379,194 @@ function scoreSummonSlot(playerIndex, cardToPlay, slotId) {
 function slotLabel(slotId) {
   const row = isFrontSlot(slotId) ? "前排" : "後排";
   return `${row} ${slotColumn(slotId) + 1}`;
+}
+
+function chooseTacticalObjective(summonerId, recipe = null) {
+  const candidates = TACTICAL_OBJECTIVES.filter((item) => item.summonerId === summonerId);
+  if (!candidates.length) return null;
+  const cards = (recipe?.cardIds ?? []).map((id) => BASE_CARDS.find((card) => card.id === id)).filter(Boolean);
+  const tagCounts = new Map();
+  for (const card of cards) {
+    for (const tag of card.tags ?? []) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+  }
+  return [...candidates]
+    .map((objective) => ({
+      objective,
+      score: objective.tags.reduce((sum, tag) => sum + (tagCounts.get(tag) ?? 0), 0),
+    }))
+    .sort((a, b) => b.score - a.score || a.objective.threshold - b.objective.threshold)[0]?.objective ?? candidates[0];
+}
+
+function tacticalObjectiveForPlayer(playerIndex) {
+  return TACTICAL_OBJECTIVES.find((item) => item.id === state.players[playerIndex]?.tacticalObjectiveId) ?? null;
+}
+
+function controlledLanes(playerIndex) {
+  return BOARD_COLUMNS.filter((column) => laneControlCount(playerIndex, column) > 0);
+}
+
+function laneControlCount(playerIndex, column) {
+  const mine = state.players[playerIndex].board.filter((minion) => slotColumn(minion.slotId) === column).length;
+  const theirs = state.players[1 - playerIndex].board.filter((minion) => slotColumn(minion.slotId) === column).length;
+  return mine - theirs;
+}
+
+function hasFormation(playerIndex) {
+  return frontlineMinions(playerIndex).length > 0 && backlineMinions(playerIndex).length > 0;
+}
+
+function triggerTacticalObjective(playerIndex, trigger, amount = 1, context = {}) {
+  const player = state.players[playerIndex];
+  const objective = tacticalObjectiveForPlayer(playerIndex);
+  if (!objective || player.tacticalObjectiveCompleted || objective.trigger !== trigger || amount <= 0) return;
+  const before = player.tacticalObjectiveProgress;
+  player.tacticalObjectiveProgress = Math.min(objective.threshold, player.tacticalObjectiveProgress + amount);
+  recordEvent(currentTransaction, "objectiveAdvanced", { label: objective.name, detail: `${before}/${objective.threshold} → ${player.tacticalObjectiveProgress}/${objective.threshold}`, tone: player.summoner.faction, objectiveId: objective.id, trigger });
+  if (player.tacticalObjectiveProgress < objective.threshold) return;
+  player.tacticalObjectiveCompleted = true;
+  player.counters.tacticalObjectivesCompleted += 1;
+  recordEvent(currentTransaction, "objectiveCompleted", { label: objective.name, detail: objective.rewardText, tone: player.summoner.faction, objectiveId: objective.id, trigger });
+  resolveObjectiveReward(playerIndex, objective.reward, context);
+  log(`${player.kind}完成戰術目標：${objective.name}。`);
+}
+
+function resolveObjectiveReward(playerIndex, reward, context = {}) {
+  if (!reward) return;
+  if (reward.type === "draw") drawCards(playerIndex, reward.amount);
+  if (reward.type === "damageHero") damageHero(1 - playerIndex, reward.amount, playerIndex);
+  if (reward.type === "healHero") healHero(playerIndex, reward.amount);
+  if (reward.type === "summonToken") summonToken(playerIndex, reward.token);
+  if (reward.type === "buffAll") buffAll(playerIndex, reward.attack, reward.health);
+  if (reward.type === "shield") gainShieldBestAlly(playerIndex);
+  if (reward.type === "gainMana") state.players[playerIndex].mana = Math.min(10, state.players[playerIndex].mana + reward.amount);
+}
+
+function triggerControlLanePassives(playerIndex) {
+  const player = state.players[playerIndex];
+  player.turnFlags.controlLaneBonusUsed ??= new Set();
+  const control = controlledLanes(playerIndex);
+  if (!control.length) return;
+  for (const minion of player.board) {
+    for (const effect of minion.effects ?? []) {
+      if (effect.type !== "controlLaneBonus" || player.turnFlags.controlLaneBonusUsed.has(minion.uid)) continue;
+      const column = slotColumn(minion.slotId);
+      if (laneControlCount(playerIndex, column) <= 0) continue;
+      player.turnFlags.controlLaneBonusUsed.add(minion.uid);
+      recordEvent(currentTransaction, "controlLaneBonus", { label: "控線加成", detail: minion.name, tone: minion.faction, slotId: minion.slotId, column });
+      if (effect.attack) addMinionStats(minion, effect.attack, 0, "控線加成");
+      if (effect.health) addMinionStats(minion, 0, effect.health, "控線加成");
+      if (effect.draw) drawCards(playerIndex, effect.draw);
+      if (effect.healHero) healHero(playerIndex, effect.healHero);
+      if (effect.expedition) addExpedition(playerIndex, effect.expedition, minion.name);
+      if (effect.gainShield) gainShield({ type: "minion", ownerIndex: playerIndex, uid: minion.uid });
+      if (effect.shieldBestAlly) gainShieldBestAlly(playerIndex);
+    }
+  }
+}
+
+function resolveDeploymentEffects(playerIndex, minion, context = {}) {
+  if (!minion) return;
+  const player = state.players[playerIndex];
+  const destinationSlotId = context.slotId ?? minion.slotId ?? null;
+  const isBack = destinationSlotId ? isBackSlot(destinationSlotId) : false;
+  const isFront = destinationSlotId ? isFrontSlot(destinationSlotId) : false;
+  const moved = Boolean(context.moved);
+  for (const effect of minion.effects ?? []) {
+    if (effect.type === "onDeploy") {
+      if (effect.movedOnly && !moved) continue;
+      if (effect.frontRow && !isFront) continue;
+      if (effect.backRow && !isBack) continue;
+      recordEvent(currentTransaction, "onDeploy", { label: "部署觸發", detail: minion.name, tone: minion.faction, slotId: destinationSlotId, moved });
+      if (effect.draw) drawCards(playerIndex, effect.draw);
+      if (effect.healHero) healHero(playerIndex, effect.healHero);
+      if (effect.expedition) addExpedition(playerIndex, effect.expedition, minion.name);
+      if (effect.attack || effect.health) addMinionStats(minion, effect.attack ?? 0, effect.health ?? 0, "部署觸發");
+      if (effect.gainShield) gainShield({ type: "minion", ownerIndex: playerIndex, uid: minion.uid });
+      if (effect.token) summonToken(playerIndex, effect.token);
+    }
+    if (effect.type === "formationReward" && hasFormation(playerIndex)) {
+      recordEvent(currentTransaction, "formationReward", { label: "成陣獎勵", detail: minion.name, tone: minion.faction, slotId: destinationSlotId });
+      if (effect.attack || effect.health) addMinionStats(minion, effect.attack ?? 0, effect.health ?? 0, "成陣獎勵");
+      if (effect.draw) drawCards(playerIndex, effect.draw);
+      if (effect.healHero) healHero(playerIndex, effect.healHero);
+      if (effect.expedition) addExpedition(playerIndex, effect.expedition, minion.name);
+      if (effect.gainShield) gainShield({ type: "minion", ownerIndex: playerIndex, uid: minion.uid });
+    }
+    if (effect.type === "controlLaneBonus") {
+      if (destinationSlotId && laneControlCount(playerIndex, slotColumn(destinationSlotId)) <= 0) continue;
+      recordEvent(currentTransaction, "controlLaneBonus", { label: "控線獎勵", detail: minion.name, tone: minion.faction, slotId: destinationSlotId });
+      if (effect.attack) addMinionStats(minion, effect.attack ?? 0, 0, "控線獎勵");
+      if (effect.health) addMinionStats(minion, 0, effect.health ?? 0, "控線獎勵");
+      if (effect.draw) drawCards(playerIndex, effect.draw);
+      if (effect.healHero) healHero(playerIndex, effect.healHero);
+      if (effect.expedition) addExpedition(playerIndex, effect.expedition, minion.name);
+      if (effect.gainShield) gainShield({ type: "minion", ownerIndex: playerIndex, uid: minion.uid });
+      if (effect.shieldBestAlly) gainShieldBestAlly(playerIndex);
+    }
+  }
+}
+
+function moveMinion(playerIndex, sourceUid, targetSlotId) {
+  const player = state.players[playerIndex];
+  const minion = player.board.find((item) => item.uid === sourceUid);
+  if (!minion) return null;
+  const fromSlotId = minion.slotId;
+  if (fromSlotId === targetSlotId) return minion;
+  removePositionBonuses(minion);
+  minion.slotId = targetSlotId;
+  applyPositionBonuses(minion);
+  recordEvent(currentTransaction, "moveMinion", { label: "部署移位", detail: `${minion.name} ${slotLabel(fromSlotId)} → ${slotLabel(targetSlotId)}`, tone: minion.faction, sourceUid, fromSlotId, targetSlotId });
+  return minion;
+}
+
+function swapMinions(playerIndex, sourceUid, targetSlotId) {
+  const player = state.players[playerIndex];
+  const source = player.board.find((item) => item.uid === sourceUid);
+  const target = getMinionAt(playerIndex, targetSlotId);
+  if (!source || !target || source.uid === target.uid) return null;
+  const sourceSlotId = source.slotId;
+  const targetSourceSlotId = target.slotId;
+  removePositionBonuses(source);
+  removePositionBonuses(target);
+  source.slotId = targetSourceSlotId;
+  target.slotId = sourceSlotId;
+  applyPositionBonuses(source);
+  applyPositionBonuses(target);
+  recordEvent(currentTransaction, "swapMinions", { label: "部署交換", detail: `${source.name} ↔ ${target.name}`, tone: source.faction, sourceUid, targetUid: target.uid, sourceSlotId, targetSlotId });
+  return { source, target };
+}
+
+function deployMinion(playerIndex, sourceUid, targetSlotId) {
+  if (state.gameOver || state.waitingForEvolution || state.active !== playerIndex) return;
+  const player = state.players[playerIndex];
+  if (player.deploymentUsed || player.mana < 1) return;
+  const source = player.board.find((item) => item.uid === sourceUid);
+  if (!source) return;
+  if (!legalDeploymentSlots(playerIndex, sourceUid).includes(targetSlotId)) return;
+  const target = getMinionAt(playerIndex, targetSlotId);
+  const originSlotId = source.slotId;
+  withTransaction("deploy", playerIndex, source, (transaction) => {
+    player.mana -= 1;
+    player.deploymentUsed = true;
+    player.counters.deploymentsThisGame += 1;
+    state.pendingAction = null;
+    recordEvent(transaction, "costPaid", { mana: 1, source: "部署" });
+    recordEvent(transaction, "deployAction", { label: "部署", detail: source.name, tone: source.faction, sourceUid, fromSlotId: originSlotId, targetSlotId });
+    if (target && target.uid !== source.uid) swapMinions(playerIndex, sourceUid, targetSlotId);
+    else moveMinion(playerIndex, sourceUid, targetSlotId);
+    const movedMinion = player.board.find((item) => item.uid === sourceUid);
+    resolveDeploymentEffects(playerIndex, movedMinion, { moved: true, fromSlotId: originSlotId, slotId: targetSlotId });
+    triggerTacticalObjective(playerIndex, "deploy", 1, { sourceUid, targetSlotId });
+    triggerTacticalObjective(playerIndex, "formation", hasFormation(playerIndex) ? 1 : 0, { sourceUid, targetSlotId });
+    triggerControlLanePassives(playerIndex);
+    checkGameOver();
+  });
+  render();
+}
+
+function canDeploy(playerIndex) {
+  const player = state.players[playerIndex];
+  return !state.gameOver && !state.waitingForEvolution && state.active === playerIndex && !state.pendingAction && !player.deploymentUsed && player.mana >= 1 && player.board.length > 0;
 }
 
 function startMatch(playerSummonerId, playerRecipe = null) {
@@ -419,6 +627,8 @@ function startTurn(playerIndex) {
   player.counters.deathExpeditionUsed = false;
   player.counters.beastHealUsed = false;
   player.heroPowerUsed = false;
+  player.deploymentUsed = false;
+  player.turnFlags.controlLaneBonusUsed = new Set();
   player.board.forEach((minion) => {
     const wasStunned = hasStatus(minion, "stunned") || hasStatus(minion, "cannotAttack");
     minion.canAttack = !wasStunned;
@@ -442,7 +652,11 @@ function endTurn() {
   if (state.gameOver || state.waitingForEvolution || state.pendingAction || state.active !== 0) return;
   state.phase = "endTurn";
   state.players[state.active].phase = "endTurn";
-  cleanupTemporaryBuffs(state.active);
+  withTransaction("turnEnd", state.active, { name: PHASE_LABELS.endTurn, type: "phase", faction: state.players[state.active].summoner.faction }, () => {
+    cleanupTemporaryBuffs(state.active);
+    triggerTacticalObjective(state.active, "controlLane", controlledLanes(state.active).length, { controlledLanes: controlledLanes(state.active) });
+  });
+  if (state.gameOver) return;
   state.phase = "cleanup";
   const next = state.active === 0 ? 1 : 0;
   if (next === 0) state.turn += 1;
@@ -496,7 +710,11 @@ function aiEndTurn() {
   if (state.gameOver) return;
   state.phase = "endTurn";
   state.players[state.active].phase = "endTurn";
-  cleanupTemporaryBuffs(state.active);
+  withTransaction("turnEnd", state.active, { name: PHASE_LABELS.endTurn, type: "phase", faction: state.players[state.active].summoner.faction }, () => {
+    cleanupTemporaryBuffs(state.active);
+    triggerTacticalObjective(state.active, "controlLane", controlledLanes(state.active).length, { controlledLanes: controlledLanes(state.active) });
+  });
+  if (state.gameOver) return;
   state.phase = "cleanup";
   state.turn += 1;
   startTurn(0);
@@ -599,6 +817,9 @@ function summonMinion(playerIndex, minion, target = null, slotId = null) {
   player.counters.summonsSinceReward += 1;
   resolveEffects(playerIndex, minion.effects, minion, target);
   triggerSummonPassives(playerIndex, minion);
+  resolveDeploymentEffects(playerIndex, minion, { moved: false, slotId: minion.slotId });
+  triggerTacticalObjective(playerIndex, "formation", hasFormation(playerIndex) ? 1 : 0, { sourceUid: minion.uid, slotId: minion.slotId });
+  triggerControlLanePassives(playerIndex);
   if (player.counters.summonsSinceReward >= 2) {
     player.counters.summonsSinceReward = 0;
     addExpedition(playerIndex, 1, "召喚節點");
@@ -669,6 +890,21 @@ function selectTarget(target) {
     if (target.type !== "slot" || target.ownerIndex !== action.playerIndex || !legalSummonSlots(action.playerIndex).includes(target.slotId)) return;
     state.pendingAction = null;
     playCard(action.playerIndex, action.cardUid, action.target, target.slotId);
+    render();
+  } else if (state.pendingAction.type === "deploySource") {
+    const action = state.pendingAction;
+    if (target.type !== "minion" || target.ownerIndex !== action.playerIndex) return;
+    if (!legalDeploymentSlots(action.playerIndex, target.uid).length) return;
+    state.pendingAction = { type: "deploySlot", playerIndex: action.playerIndex, sourceUid: target.uid };
+    log(`選擇 ${target.name ?? target.uid} 的部署目標。`);
+    render();
+  } else if (state.pendingAction.type === "deploySlot") {
+    const action = state.pendingAction;
+    const legalSlots = legalDeploymentSlots(action.playerIndex, action.sourceUid);
+    const slotId = target.type === "slot" ? target.slotId : target.type === "minion" ? target.slotId : null;
+    if (!slotId || !legalSlots.includes(slotId)) return;
+    state.pendingAction = null;
+    deployMinion(action.playerIndex, action.sourceUid, slotId);
     render();
   }
 }
@@ -1107,6 +1343,7 @@ function triggerTurnStartPassives(playerIndex) {
       const shield = artifact.effects.find((effect) => effect.type === "startTurnShield");
       if (shield) gainShieldBestAlly(playerIndex);
     }
+    triggerControlLanePassives(playerIndex);
   });
 }
 
@@ -1495,6 +1732,10 @@ function runAiActions(playerIndex) {
   }
   const powerTarget = chooseAiHeroPowerTarget(playerIndex);
   if (canUseHeroPower(playerIndex) && powerTarget !== false) useHeroPower(playerIndex, powerTarget);
+  const deployChoice = chooseAiDeployAction(playerIndex);
+  if (deployChoice) {
+    deployMinion(playerIndex, deployChoice.sourceUid, deployChoice.slotId);
+  }
   const ai = state.players[playerIndex];
   for (const minion of [...ai.board]) {
     if (!minion.canAttack || minion.attackedThisTurn) continue;
@@ -1529,6 +1770,70 @@ function chooseAiHeroPowerTarget(playerIndex) {
     return { type: "hero", ownerIndex: 1 - playerIndex };
   }
   return null;
+}
+
+function chooseAiDeployAction(playerIndex) {
+  const player = state.players[playerIndex];
+  if (!canDeploy(playerIndex)) return null;
+  const objective = tacticalObjectiveForPlayer(playerIndex);
+  const candidates = [];
+  for (const source of player.board) {
+    for (const slotId of legalDeploymentSlots(playerIndex, source.uid)) {
+      const score = scoreDeploymentMove(playerIndex, source, slotId, objective);
+      candidates.push({ sourceUid: source.uid, slotId, score });
+    }
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+  if (!best || best.score <= 0) return null;
+  return best;
+}
+
+function scoreDeploymentMove(playerIndex, source, targetSlotId, objective = null) {
+  const player = state.players[playerIndex];
+  const opponent = state.players[1 - playerIndex];
+  const targetRow = slotRow(targetSlotId);
+  const targetColumn = slotColumn(targetSlotId);
+  const sourceRow = slotRow(source.slotId);
+  const sourceColumn = slotColumn(source.slotId);
+  let score = 0;
+  const wantsFront = hasKeyword(source, "guard") || hasKeyword(source, "vanguard") || source.effects.some((effect) => ["protectBackline", "frontlineBonus", "breakthrough"].includes(effect.type));
+  const wantsBack = hasKeyword(source, "ranged") || hasKeyword(source, "support") || source.effects.some((effect) => ["backlineBonus", "spellPing", "spellDamageAura", "startTurnHeal", "formationReward", "controlLaneBonus"].includes(effect.type));
+  if (targetRow === "front" && wantsFront) score += 5;
+  if (targetRow === "back" && wantsBack) score += 5;
+  if (targetRow === "front" && !wantsFront) score += 1;
+  if (targetRow === "back" && !wantsBack) score += 1;
+  if (sourceRow !== targetRow) score += 1;
+  if (hasFormationAfterMove(playerIndex, source.uid, targetSlotId)) score += 2;
+  const currentControl = laneControlCount(playerIndex, sourceColumn);
+  const projectedControl = projectedLaneControl(playerIndex, source.uid, targetSlotId);
+  if (projectedControl > currentControl) score += 2;
+  if (objective?.trigger === "deploy" && !player.tacticalObjectiveCompleted) score += 3;
+  if (objective?.trigger === "controlLane" && projectedControl > 0) score += 3;
+  if (objective?.trigger === "formation" && hasFormationAfterMove(playerIndex, source.uid, targetSlotId)) score += 3;
+  if (source.tags?.some((tag) => ["deploy-shift", "v13-deploy"].includes(tag))) score += 1;
+  if (source.currentAttack >= 4 && targetRow === "front") score += 1;
+  if (highestBacklineThreat(1 - playerIndex) && hasKeyword(source, "protectBackline") && targetRow === "front") score += 2;
+  if (targetColumn === sourceColumn) score += 0.5;
+  if (opponent.board.length && targetRow === "front" && wantsFront) score += 1;
+  return score;
+}
+
+function projectedLaneControl(playerIndex, sourceUid, targetSlotId) {
+  const source = state.players[playerIndex].board.find((item) => item.uid === sourceUid);
+  if (!source) return 0;
+  const sourceColumn = slotColumn(source.slotId);
+  const targetColumn = slotColumn(targetSlotId);
+  if (sourceColumn === targetColumn) return laneControlCount(playerIndex, targetColumn);
+  const board = state.players[playerIndex].board.map((minion) => (minion.uid === sourceUid ? { ...minion, slotId: targetSlotId } : minion));
+  const mine = board.filter((minion) => slotColumn(minion.slotId) === targetColumn).length;
+  const theirs = state.players[1 - playerIndex].board.filter((minion) => slotColumn(minion.slotId) === targetColumn).length;
+  return mine - theirs;
+}
+
+function hasFormationAfterMove(playerIndex, sourceUid, targetSlotId) {
+  const board = state.players[playerIndex].board.map((minion) => (minion.uid === sourceUid ? { ...minion, slotId: targetSlotId } : minion));
+  return board.some((minion) => isFrontSlot(minion.slotId)) && board.some((minion) => isBackSlot(minion.slotId));
 }
 
 function chooseAiPlay(playerIndex = 1) {
@@ -1567,10 +1872,12 @@ function scoreAiCard(playerIndex, cardToScore) {
   if (cardToScore.effects.some((effect) => effect.type === "healHero" || effect.type === "healTarget") && player.hp <= 15) score += 4;
   if (cardToScore.effects.some((effect) => effect.type === "expedition") && player.expedition < nextEvolutionThreshold(player)) score += 2;
   if (cardToScore.effects.some((effect) => effect.type === "destroyArtifact") && opponent.artifacts.length) score += 4;
-  if (cardToScore.effects.some((effect) => ["adjacentBuff", "frontlineBonus", "backlineBonus", "protectBackline", "breakthrough"].includes(effect.type))) score += 2;
+  if (cardToScore.effects.some((effect) => ["adjacentBuff", "frontlineBonus", "backlineBonus", "protectBackline", "breakthrough", "onDeploy", "formationReward", "controlLaneBonus"].includes(effect.type))) score += 2;
   if (cardToScore.effects.some((effect) => effect.type === "protectBackline") && highestBacklineThreat(playerIndex)) score += 4;
   if (cardToScore.effects.some((effect) => effect.type === "breakthrough") && highestBacklineThreat(1 - playerIndex)) score += 3;
   if (hasKeyword(cardToScore, "ranged") && backlineMinions(1 - playerIndex).length) score += 2;
+  if (cardToScore.tags?.includes("v13-deploy")) score += 1;
+  if (cardToScore.effects.some((effect) => effect.type === "onDeploy") && !player.board.length) score += 1;
   return score;
 }
 
@@ -1752,12 +2059,20 @@ function visualTypeToRuleEvent(type) {
   return {
     playCard: "cardPlayed",
     attack: "attackDeclared",
+    deploy: "deployAction",
     damage: "damageApplied",
     heal: "healingApplied",
     shield: "shieldGained",
     shieldBreak: "shieldBroken",
     secretTrigger: "secretTriggered",
     summon: "minionSummoned",
+    moveMinion: "moveMinion",
+    swapMinions: "swapMinions",
+    onDeploy: "onDeploy",
+    formationReward: "formationReward",
+    controlLaneBonus: "controlLaneBonus",
+    objectiveAdvanced: "objectiveAdvanced",
+    objectiveCompleted: "objectiveCompleted",
     evolution: "evolutionUnlocked",
   }[type] ?? type;
 }
@@ -1786,6 +2101,13 @@ function buildVisualTimeline(transaction) {
   if (first) {
     const type = first.type === "cardPlayed" ? "playCard" : first.type === "heroPowerUsed" ? "heroPower" : "attack";
     pushStep(type, first.payload.label ?? eventLabel(type), first.payload.detail ?? "", first.payload.tone ?? transaction.source?.faction);
+  }
+
+  const deploy = events.filter((event) => ["deployAction", "moveMinion", "swapMinions"].includes(event.type));
+  if (deploy.length) {
+    const label = deploy.find((event) => event.type === "deployAction")?.payload.label ?? "部署調整";
+    const detail = deploy.map((event) => event.payload.detail || event.payload.label).filter(Boolean).join("、");
+    pushStep("deploy", label, detail, transaction.source?.faction ?? "status", deploy);
   }
 
   const position = events.filter((event) => ["slotSelected", "positionBonusApplied", "attackBlockedByFrontline"].includes(event.type));
@@ -1836,6 +2158,14 @@ function buildVisualTimeline(transaction) {
     const label = evo ? evo.payload.label : progress[0].payload.label ?? "遠征推進";
     const detail = progress.map((event) => event.payload.detail || event.payload.label).filter(Boolean).join("、");
     pushStep(evo ? "evolution" : "quest", label, detail, evo?.payload.tone ?? "evolution", progress);
+  }
+
+  const objective = events.filter((event) => ["objectiveAdvanced", "objectiveCompleted", "formationReward", "controlLaneBonus", "onDeploy"].includes(event.type));
+  if (objective.length) {
+    const completed = objective.find((event) => event.type === "objectiveCompleted");
+    const label = completed ? completed.payload.label : objective[0].payload.label ?? "戰術調整";
+    const detail = objective.map((event) => event.payload.detail || event.payload.label).filter(Boolean).join("、");
+    pushStep(completed ? "evolution" : "quest", label, detail, completed?.payload.tone ?? "status", objective);
   }
 
   return compactTimeline(steps, transaction.kind);
@@ -1933,6 +2263,7 @@ function effectImage(event) {
     summon: "evolution",
     death: "damage",
     quest: "evolution",
+    deploy: "evolution",
     heroPower: "evolution",
     summary: "evolution",
     playCard: "evolution",
@@ -1944,6 +2275,7 @@ function effectImage(event) {
 function eventLabel(type) {
   const labels = {
     attack: "進攻",
+    deploy: "部署",
     damage: "傷害",
     heal: "治療",
     heroPower: "召喚師技能",
@@ -1952,6 +2284,13 @@ function eventLabel(type) {
     shield: "護盾",
     shieldBreak: "護盾破裂",
     summon: "召喚",
+    moveMinion: "移動",
+    swapMinions: "交換",
+    onDeploy: "部署觸發",
+    formationReward: "成陣獎勵",
+    controlLaneBonus: "控線獎勵",
+    objectiveAdvanced: "戰術推進",
+    objectiveCompleted: "戰術完成",
     death: "死亡",
     quest: "任務推進",
     summary: "連鎖結算",
@@ -1974,6 +2313,8 @@ function currentActionHint() {
   if (state.waitingForEvolution) return "進化突破：選擇一張牌";
   if (state.pendingAction?.type === "attackTarget") return "選擇攻擊目標";
   if (state.pendingAction?.type === "summonSlot") return "選擇召喚格位";
+  if (state.pendingAction?.type === "deploySource") return "選擇要部署的友方召喚物";
+  if (state.pendingAction?.type === "deploySlot") return "選擇部署目標格位";
   if (state.pendingAction?.type === "heroPowerTarget") return "選擇召喚師技能目標";
   if (state.pendingAction?.type === "cardTarget") return "選擇卡牌目標";
   if (state.gameOver) return "對局結束";
@@ -2090,6 +2431,8 @@ export function simulateGame(firstSummonerId, secondSummonerId, options = {}) {
     turns: state.turn,
     evolutions: state.players[0].evolutionCount + state.players[1].evolutionCount,
     handCards: state.players[0].hand.length + state.players[1].hand.length,
+    deployments: state.players[0].counters.deploymentsThisGame + state.players[1].counters.deploymentsThisGame,
+    objectiveCompletions: state.players[0].counters.tacticalObjectivesCompleted + state.players[1].counters.tacticalObjectivesCompleted,
     emptyHandTurns,
     peakBoardAttackGap,
     quests: state.players.map((player) => ({ questId: player.questId, progress: player.questProgress, completed: player.questCompleted })),
@@ -2113,6 +2456,8 @@ export function summarizeSimulationResults(results) {
     avgTurns: average(results.map((item) => item.turns)),
     avgEvolutions: average(results.map((item) => item.evolutions)),
     avgHand: average(results.map((item) => item.handCards / 2)),
+    avgDeployments: average(results.map((item) => item.deployments / 2)),
+    avgObjectiveCompletions: average(results.map((item) => item.objectiveCompletions / 2)),
     emptyHandRate: average(results.map((item) => item.emptyHandTurns / Math.max(1, item.turns * 2))),
     avgPeakBoardAttackGap: average(results.map((item) => item.peakBoardAttackGap)),
     failures: results.filter((item) => item.failureReason),
@@ -2121,7 +2466,7 @@ export function summarizeSimulationResults(results) {
 }
 
 function renderBalanceSummary(summary) {
-  const { total, firstWins, secondWins, stalled, avgTurns, avgEvolutions, avgHand, emptyHandRate, avgPeakBoardAttackGap } = Array.isArray(summary)
+  const { total, firstWins, secondWins, stalled, avgTurns, avgEvolutions, avgHand, avgDeployments, avgObjectiveCompletions, emptyHandRate, avgPeakBoardAttackGap } = Array.isArray(summary)
     ? summarizeSimulationResults(summary)
     : summary;
   els.balanceSummary.innerHTML = `
@@ -2129,6 +2474,8 @@ function renderBalanceSummary(summary) {
     <div><strong>${avgTurns.toFixed(1)}</strong><span>平均回合</span></div>
     <div><strong>${avgEvolutions.toFixed(1)}</strong><span>平均總進化</span></div>
     <div><strong>${avgHand.toFixed(1)}</strong><span>平均手牌</span></div>
+    <div><strong>${avgDeployments.toFixed(1)}</strong><span>平均部署</span></div>
+    <div><strong>${avgObjectiveCompletions.toFixed(1)}</strong><span>平均戰術完成</span></div>
     <div><strong>${Math.round((firstWins / total) * 100)}%</strong><span>先手勝率</span></div>
     <div><strong>${Math.round((secondWins / total) * 100)}%</strong><span>後手勝率</span></div>
     <div><strong>${Math.round(emptyHandRate * 100)}%</strong><span>空手回合率</span></div>
@@ -2157,6 +2504,11 @@ function render() {
   renderActionHint();
   els.log.innerHTML = state.logs.map((item) => `<div>${item}</div>`).join("");
   els.endTurn.disabled = state.active !== 0 || state.waitingForEvolution || state.pendingAction || state.gameOver;
+  if (els.deploy) {
+    const deployPending = state.pendingAction?.type === "deploySource" || state.pendingAction?.type === "deploySlot";
+    els.deploy.textContent = deployPending ? "取消部署" : "部署 1";
+    els.deploy.disabled = !deployPending && !canDeploy(0);
+  }
 }
 
 function renderPlayerArea(container, player, isOpponent = false) {
@@ -2165,6 +2517,7 @@ function renderPlayerArea(container, player, isOpponent = false) {
   const power = currentHeroPower(ownerIndex);
   const powerDisabled = ownerIndex !== 0 || !canUseHeroPower(ownerIndex);
   const quest = QUEST_LINES.find((item) => item.id === player.questId);
+  const objective = tacticalObjectiveForPlayer(ownerIndex);
   const awakened = player.awakenedPowers.length ? `<div class="awakened">覺醒：${player.awakenedPowers.map((mode) => FACTION_LABELS[mode]).join("、")}</div>` : "";
   const theme = themeFor(player.summoner.faction);
   container.setAttribute("style", `--card-primary:${theme.primary};--card-accent:${theme.accent};--card-surface:${theme.surface};`);
@@ -2185,6 +2538,8 @@ function renderPlayerArea(container, player, isOpponent = false) {
     <div class="stat-panel"><strong>${player.deck.length}</strong><span>牌庫</span></div>
     <div class="stat-panel"><strong>${player.expedition}/${nextEvolutionThreshold(player)}</strong><span>遠征 ${player.evolutionCount}/5</span></div>
     <div class="stat-panel quest-stat"><strong>${player.questCompleted ? "完成" : `${player.questProgress}/${quest?.threshold ?? 0}`}</strong><span>${quest?.name ?? "任務"}</span></div>
+    <div class="stat-panel objective-stat"><strong>${player.tacticalObjectiveCompleted ? "完成" : `${player.tacticalObjectiveProgress}/${objective?.threshold ?? 0}`}</strong><span>${objective?.name ?? "戰術目標"}</span></div>
+    <div class="objective-note">${objective?.conditionText ?? "尚未選擇戰術目標"}${objective ? ` · 獎勵：${objective.rewardText}` : ""}</div>
     ${isOpponent ? `<div class="stat-panel"><strong>${player.hand.length}</strong><span>手牌</span></div>` : ""}
     <div class="stat-panel"><strong>${player.secrets.length}</strong><span>秘儀</span></div>
   `;
@@ -2211,6 +2566,10 @@ function renderBoard(container, player, ownerIndex) {
         node.innerHTML = boardMarkup(minion);
         if (isPendingMinionTarget(ownerIndex, minion)) {
           node.addEventListener("click", () => selectTarget({ type: "minion", ownerIndex, uid: minion.uid }));
+        } else if (state.pendingAction?.type === "deploySource" && ownerIndex === state.pendingAction.playerIndex && isPendingDeploySource(ownerIndex, minion)) {
+          node.addEventListener("click", () => selectTarget({ type: "minion", ownerIndex, uid: minion.uid, slotId: minion.slotId, name: minion.name }));
+        } else if (state.pendingAction?.type === "deploySlot" && ownerIndex === state.pendingAction.playerIndex && isPendingDeploySlot(ownerIndex, minion.slotId)) {
+          node.addEventListener("click", () => selectTarget({ type: "slot", ownerIndex, slotId: minion.slotId }));
         } else if (ownerIndex === 0 && minion.canAttack && !state.pendingAction) {
           node.addEventListener("click", () => attack(minion.uid));
         } else if (ownerIndex === 1 && !state.pendingAction) {
@@ -2221,9 +2580,10 @@ function renderBoard(container, player, ownerIndex) {
         }
       } else {
         const legalSlot = isPendingSummonSlot(ownerIndex, slot.slotId);
-        node.className = `board-slot empty-slot ${row} ${legalSlot ? "legal-target" : state.pendingAction?.type === "summonSlot" ? "illegal-target" : ""}`;
+        const deploySlot = isPendingDeploySlot(ownerIndex, slot.slotId);
+        node.className = `board-slot empty-slot ${row} ${legalSlot || deploySlot ? "legal-target" : state.pendingAction?.type === "summonSlot" || state.pendingAction?.type === "deploySlot" ? "illegal-target" : ""}`;
         node.innerHTML = `<span>${slotLabel(slot.slotId)}</span>`;
-        if (legalSlot) node.addEventListener("click", () => selectTarget({ type: "slot", ownerIndex, slotId: slot.slotId }));
+        if (legalSlot || deploySlot) node.addEventListener("click", () => selectTarget({ type: "slot", ownerIndex, slotId: slot.slotId }));
       }
       rowNode.append(node);
     }
@@ -2262,13 +2622,18 @@ function renderMetrics() {
   const [player, opponent] = state.players;
   const playerAttack = boardAttack(player);
   const opponentAttack = boardAttack(opponent);
+  const objective = tacticalObjectiveForPlayer(0);
   const phaseText = PHASE_LABELS[state.phase] ?? PHASE_LABELS[state.players[state.active]?.phase] ?? "主要階段";
   const pendingText = state.pendingAction
     ? state.pendingAction.type === "attackTarget"
       ? "選擇攻擊目標"
       : state.pendingAction.type === "summonSlot"
         ? "選擇召喚格位"
-      : "選擇卡牌目標"
+        : state.pendingAction.type === "deploySource"
+          ? "選擇部署來源"
+          : state.pendingAction.type === "deploySlot"
+            ? "選擇部署目標"
+            : "選擇卡牌目標"
     : state.active === 0
       ? `玩家回合 · ${phaseText}`
       : `對手回合 · ${phaseText}`;
@@ -2278,6 +2643,8 @@ function renderMetrics() {
     <div><strong>${player.hand.length}/${opponent.hand.length}</strong><span>手牌 我/敵</span></div>
     <div><strong>${player.deck.length}/${opponent.deck.length}</strong><span>牌庫 我/敵</span></div>
     <div><strong>${playerAttack}/${opponentAttack}</strong><span>場攻 我/敵</span></div>
+    <div><strong>${player.deploymentUsed ? "已用" : "可用"}</strong><span>部署</span></div>
+    <div><strong>${player.tacticalObjectiveCompleted ? "完成" : `${player.tacticalObjectiveProgress}/${objective?.threshold ?? 0}`}</strong><span>戰術 ${objective?.name ?? "目標"}</span></div>
     <div class="wide"><strong>${pendingText}</strong><span>狀態</span></div>
   `;
 }
@@ -2311,11 +2678,24 @@ function isPendingSummonSlot(ownerIndex, slotId) {
   return state.pendingAction.playerIndex === ownerIndex && legalSummonSlots(ownerIndex).includes(slotId);
 }
 
+function isPendingDeploySource(ownerIndex, minion) {
+  if (state.pendingAction?.type !== "deploySource") return false;
+  return state.pendingAction.playerIndex === ownerIndex && legalDeploymentSlots(ownerIndex, minion.uid).length > 0;
+}
+
+function isPendingDeploySlot(ownerIndex, slotId) {
+  if (state.pendingAction?.type !== "deploySlot") return false;
+  return state.pendingAction.playerIndex === ownerIndex && legalDeploymentSlots(ownerIndex, state.pendingAction.sourceUid).includes(slotId);
+}
+
 function getMinionClasses(ownerIndex, minion) {
   const classes = [];
   if (ownerIndex === 0 && minion.canAttack && !minion.attackedThisTurn && !state.pendingAction) classes.push("can-attack");
   if (state.pendingAction?.type === "attackTarget" && state.pendingAction.attackerUid === minion.uid) classes.push("selected-attacker");
-  if (isPendingMinionTarget(ownerIndex, minion)) classes.push("legal-target");
+  const legalDeploySource = isPendingDeploySource(ownerIndex, minion);
+  const legalDeploySlot = state.pendingAction?.type === "deploySlot" && isPendingDeploySlot(ownerIndex, minion.slotId);
+  if (legalDeploySource) classes.push("deploy-source");
+  if (isPendingMinionTarget(ownerIndex, minion) || legalDeploySlot || legalDeploySource) classes.push("legal-target");
   else if (state.pendingAction?.type === "attackTarget" && ownerIndex === 1) classes.push("blocked-target");
   else if (state.pendingAction) classes.push("illegal-target");
   for (const status of minion.statuses ?? []) classes.push(`status-${status}`);
@@ -2365,6 +2745,9 @@ function tacticalBadgeMarkup(item) {
   if (protectsBackline(item)) badges.push("保護後排");
   if (item.effects?.some((effect) => effect.type === "breakthrough")) badges.push("突破");
   if (item.effects?.some((effect) => effect.type === "adjacentBuff")) badges.push("相鄰連鎖");
+  if (item.effects?.some((effect) => effect.type === "onDeploy")) badges.push("部署");
+  if (item.effects?.some((effect) => effect.type === "formationReward")) badges.push("成陣");
+  if (item.effects?.some((effect) => effect.type === "controlLaneBonus")) badges.push("控線");
   if (!badges.length) return "";
   return `<div class="tactical-badges">${badges.map((badge) => `<span>${badge}</span>`).join("")}</div>`;
 }
@@ -2604,7 +2987,12 @@ function renderQuestSelect() {
 }
 
 function renderBuilderTags() {
-  const tags = [...new Set(questsForSummoner(builder.summonerId).flatMap((quest) => quest.tags))];
+  const tags = [
+    ...new Set([
+      ...questsForSummoner(builder.summonerId).flatMap((quest) => quest.tags),
+      ...legalCardsForSummoner(builder.summonerId).flatMap((card) => card.tags.filter((tag) => !KEYWORD_LABELS[tag])),
+    ]),
+  ];
   els.builderTag.innerHTML = [`<option value="all">全部</option>`, ...tags.map((tag) => `<option value="${tag}" ${tag === builder.filters.tag ? "selected" : ""}>${tag}</option>`)].join("");
 }
 
@@ -2739,6 +3127,17 @@ function initBrowserGame() {
   setAnimationDetail(loadAnimationDetail());
   els.animationSpeed.addEventListener("change", () => setAnimationSpeed(els.animationSpeed.value));
   els.animationDetail.addEventListener("change", () => setAnimationDetail(els.animationDetail.value));
+  els.deploy?.addEventListener("click", () => {
+    if (state?.pendingAction?.type === "deploySource" || state?.pendingAction?.type === "deploySlot") {
+      state.pendingAction = null;
+      render();
+      return;
+    }
+    if (!canDeploy(0)) return;
+    state.pendingAction = { type: "deploySource", playerIndex: 0 };
+    log("選擇要部署的友方召喚物。");
+    render();
+  });
   els.endTurn.addEventListener("click", endTurn);
   els.newGame.addEventListener("click", () => location.reload());
   els.simulate.addEventListener("click", () => runBalanceSimulation(50));

@@ -207,6 +207,7 @@ export const SUMMONERS = [
 ];
 
 export const BASE_CARDS = [
+  card("lattice-guide", "星格導引者", 2, "minion", "star", "common", { attack: 2, health: 3, speed: 1 }, "部署：若你將它從前排移到後排，抽 1 張牌。成陣：若你前後排皆有召喚物，賦予護盾。", ["spell-chain", "deploy-shift", "v13-deploy"], [{ type: "onDeploy", draw: 1, backRow: true, movedOnly: true }, { type: "formationReward", shield: true }]),
   card("star-apprentice", "星火學徒", 2, "minion", "star", "common", { attack: 2, health: 3, speed: 1 }, "戰吼：若你本回合施放過法術，抽 1 張牌。", ["mage"], [{ type: "drawIfSpellThisTurn", amount: 1 }]),
   card("astral-bolt", "星屑箭", 1, "spell", "star", "common", null, "對一個敵方目標造成 2 點傷害。推進遠征軌 +1。", ["damage"], [{ type: "damage", amount: 2, target: "enemy" }, { type: "expedition", amount: 1, target: "none" }]),
   card("mirror-rune", "鏡面符文", 2, "secret", "star", "rare", null, "秘儀：敵方法術造成傷害時，抵銷 2 點並抽 1 張牌。", ["secret"], [{ type: "spellShield", amount: 2 }]),
@@ -228,6 +229,7 @@ export const BASE_CARDS = [
   card("prism-frontguard", "折光前衛", 3, "minion", "star", "rare", { attack: 2, health: 5, speed: 1 }, "守護。保護後排：敵方遠程不能越過它攻擊後排。", ["mage", "guard", "secret-control", "v12-position"], [{ type: "protectBackline" }]),
   card("stellar-alignment", "星位校準", 2, "spell", "star", "common", null, "使一個友方召喚物相鄰的友方召喚物 +1/+1。", ["buff", "spell-chain", "v12-position"], [{ type: "adjacentBuff", attack: 1, health: 1, target: "allyMinion" }]),
 
+  card("grove-strider", "林徑行者", 3, "minion", "forest", "common", { attack: 3, health: 4, speed: 1 }, "部署：若你將它從前排移到後排，為你的英雄恢復 2 點生命。成陣：使此牌 +1/+1。", ["beast-swarm", "deploy-shift", "v13-deploy"], [{ type: "onDeploy", healHero: 2, backRow: true, movedOnly: true }, { type: "formationReward", attack: 1, health: 1 }]),
   card("forest-oathkeeper", "森林守誓者", 3, "minion", "forest", "common", { attack: 3, health: 4, speed: 1 }, "每當你召喚野獸，為你的英雄恢復 1 點生命。", ["beast-ally"], [{ type: "healOnBeast", amount: 1 }]),
   card("antler-guardian", "鹿角守衛", 2, "minion", "forest", "common", { attack: 1, health: 4, speed: 1 }, "守護：敵方必須優先攻擊它。", ["beast", "guard"], []),
   card("wild-growth", "野性滋長", 2, "spell", "forest", "common", null, "恢復 4 點生命，並召喚 1 個 1/1 小鹿。", ["heal"], [{ type: "healHero", amount: 4 }, { type: "summonToken", token: "fawn" }]),
@@ -249,6 +251,7 @@ export const BASE_CARDS = [
   card("vine-tactician", "藤蔓調律者", 2, "minion", "forest", "common", { attack: 1, health: 3, speed: 1 }, "支援。登場：相鄰友方召喚物 +0/+1。", ["beast", "support", "beast-swarm", "v12-position"], [{ type: "adjacentBuff", attack: 0, health: 1 }]),
   card("canopy-formation", "林冠陣式", 3, "spell", "forest", "common", null, "使一個友方召喚物相鄰的友方召喚物 +1/+2。", ["buff", "beast-swarm", "v12-position"], [{ type: "adjacentBuff", attack: 1, health: 2, target: "allyMinion" }]),
 
+  card("skyline-rider", "天際巡翼者", 2, "minion", "dragon", "common", { attack: 2, health: 2, speed: 2 }, "遠程。控線：若你控制這條線，它獲得 +1 攻擊。", ["soldier", "ranged", "v13-deploy"], [{ type: "controlLaneBonus", attack: 1 }]),
   card("dragon-judgment", "龍焰裁決", 4, "spell", "dragon", "rare", null, "對一個敵方目標造成 5 點傷害；若本局已進化 2 次，改為造成 7 點。", ["damage"], [{ type: "dragonJudgment", target: "enemy" }]),
   card("ember-squire", "餘燼侍從", 1, "minion", "dragon", "common", { attack: 2, health: 1, speed: 2 }, "迅捷。", ["soldier", "swift"], []),
   card("flame-lance", "烈焰長槍", 2, "spell", "dragon", "common", null, "對一個敵方目標造成 3 點傷害。", ["damage"], [{ type: "damage", amount: 3, target: "enemy" }]),
@@ -270,6 +273,7 @@ export const BASE_CARDS = [
   card("emberline-horn", "焰線號手", 2, "minion", "dragon", "common", { attack: 2, health: 2, speed: 1 }, "先鋒。若在前排登場，獲得 +1/+0。", ["soldier", "vanguard", "aggro-burn", "v12-position"], [{ type: "frontlineBonus", attack: 1, health: 0 }]),
   card("skyspear-drake", "天矛幼龍", 5, "minion", "dragon", "rare", { attack: 5, health: 4, speed: 1 }, "遠程。突破：攻擊前排後，對同列後排造成 2 點傷害。", ["dragon", "ranged", "dragon-finish", "v12-position"], [{ type: "breakthrough", amount: 2 }]),
 
+  card("grave-route-mender", "墓徑修補者", 3, "minion", "moon", "common", { attack: 2, health: 4, speed: 1 }, "部署：若你將它重新部署，召喚 1 個 1/1 亡魂。成陣：抽 1 張牌。", ["sacrifice-draw", "deploy-shift", "v13-deploy"], [{ type: "onDeploy", token: "wraith", movedOnly: true }, { type: "formationReward", draw: 1 }]),
   card("moon-echo", "月墓回聲", 2, "secret", "moon", "rare", null, "秘儀：當敵方召喚物攻擊時，召喚 1 個 1/1 亡魂並使攻擊目標改為它。", ["secret"], [{ type: "redirectAttack" }]),
   card("bone-acolyte", "白骨侍祭", 2, "minion", "moon", "common", { attack: 2, health: 2, speed: 1 }, "死亡：抽 1 張牌。", ["undead"], [{ type: "drawOnDeath", amount: 1 }]),
   card("grave-offering", "墓月獻祭", 1, "spell", "moon", "common", null, "對一個友方召喚物造成 1 點傷害，抽 1 張牌，推進遠征軌 +1。", ["sacrifice"], [{ type: "sacrificeDraw", target: "allyMinion" }, { type: "expedition", amount: 1, target: "none" }]),
@@ -290,6 +294,7 @@ export const BASE_CARDS = [
   card("bonewall-keeper", "骨牆守衛", 2, "minion", "moon", "common", { attack: 1, health: 4, speed: 1 }, "守護。保護後排。死亡：召喚 1 個 1/1 亡魂。", ["undead", "guard", "sacrifice-draw", "v12-position"], [{ type: "protectBackline" }, { type: "summonOnDeath", token: "wraith" }]),
   card("deadlane-command", "亡陣號令", 2, "spell", "moon", "common", null, "使一個友方召喚物相鄰的友方召喚物 +1/+0。若已有 3 個友方死亡，抽 1 張牌。", ["sacrifice", "revive-grind", "v12-position"], [{ type: "adjacentBuff", attack: 1, health: 0, target: "allyMinion" }, { type: "drawIfDeaths", deaths: 3, amount: 1 }]),
 
+  card("bastion-marshal", "壁壘元帥", 3, "minion", "iron", "common", { attack: 2, health: 5, speed: 1 }, "守護。部署：若你將它移到前排，賦予護盾。控線：若你控制這條線，賦予最佳友方召喚物護盾。", ["guard-wall", "deploy-shift", "v13-deploy"], [{ type: "onDeploy", gainShield: true, frontRow: true, movedOnly: true }, { type: "controlLaneBonus", shieldBestAlly: true }]),
   card("expedition-banner", "遠征旗印", 3, "artifact", "iron", "rare", null, "你的召喚物每回合首次進攻後，遠征軌 +1。", ["banner"], [{ type: "firstAttackExpedition", amount: 1 }]),
   card("iron-vanguard", "鐵誓先鋒", 2, "minion", "iron", "common", { attack: 2, health: 3, speed: 1 }, "若你控制遺物，獲得 +1/+1。", ["soldier"], [{ type: "buffIfArtifact", amount: 1 }]),
   card("relic-hammer", "遺跡戰錘", 3, "artifact", "iron", "common", null, "你的第一個召喚物攻擊時，額外造成 1 點傷害。", ["weapon"], [{ type: "bonusAttackDamage", amount: 1 }]),
@@ -311,6 +316,7 @@ export const BASE_CARDS = [
   card("flank-sergeant", "側翼軍士", 3, "minion", "iron", "common", { attack: 2, health: 4, speed: 1 }, "登場：相鄰友方召喚物 +1/+1。", ["soldier", "relic-midrange", "v12-position"], [{ type: "adjacentBuff", attack: 1, health: 1 }]),
   card("bastion-ballista", "堡壘弩砲", 4, "minion", "iron", "rare", { attack: 3, health: 5, speed: 1 }, "遠程。若在後排登場，獲得護盾。", ["soldier", "ranged", "guard-wall", "v12-position"], [{ type: "backlineBonus", shield: true }]),
 
+  card("road-chorus", "路歌合唱", 2, "minion", "neutral", "common", { attack: 1, health: 3, speed: 1 }, "支援。部署：抽 1 張牌。成陣：推進遠征軌 +1。", ["support", "quest-support", "deploy-shift", "v13-deploy"], [{ type: "onDeploy", draw: 1, movedOnly: true }, { type: "formationReward", expedition: 1 }]),
   card("wandering-sprite", "流浪小精", 1, "minion", "neutral", "common", { attack: 1, health: 2, speed: 2 }, "迅捷。", ["beast", "swift"], []),
   card("arcane-rations", "奧術乾糧", 1, "spell", "neutral", "common", null, "抽 1 張牌。", ["draw"], [{ type: "draw", amount: 1 }]),
   card("road-guard", "旅道守衛", 2, "minion", "neutral", "common", { attack: 2, health: 2, speed: 1 }, "守護。", ["guard"], []),
@@ -409,6 +415,19 @@ export const QUEST_LINES = [
   quest("iron-guard-wall", "盾牆誓約", "iron", "召喚 4 個守護或護盾召喚物。", "guardOrWardSummon", 4, ["guard-wall"], { type: "buffAll", attack: 1, health: 1 }, "全體友方召喚物 +1/+1。"),
 ];
 
+export const TACTICAL_OBJECTIVES = [
+  tacticalObjective("star-deploy-initiative", "星軌部署", "star", "本回合部署 2 次。", "deploy", 2, ["deploy-shift"], { type: "draw", amount: 1 }, "抽 1 張牌。"),
+  tacticalObjective("star-lane-control", "星門控線", "star", "在回合結束時控制 2 條戰線。", "controlLane", 2, ["secret-control"], { type: "shield", amount: 1 }, "為最佳友方召喚物賦予護盾。"),
+  tacticalObjective("forest-formation", "林冠成陣", "forest", "本回合形成 2 次前後排連動。", "formation", 2, ["beast-swarm"], { type: "buffAll", attack: 1, health: 1 }, "全部友方召喚物 +1/+1。"),
+  tacticalObjective("forest-deploy-growth", "藤徑部署", "forest", "本回合部署 3 次。", "deploy", 3, ["life-growth"], { type: "healHero", amount: 3 }, "為你的英雄恢復 3 點生命。"),
+  tacticalObjective("dragon-deploy-pressure", "龍線壓迫", "dragon", "本回合部署 2 次。", "deploy", 2, ["aggro-burn"], { type: "damageHero", amount: 2 }, "對敵方英雄造成 2 點傷害。"),
+  tacticalObjective("dragon-lane-pressure", "熔線控場", "dragon", "在回合結束時控制 2 條戰線。", "controlLane", 2, ["dragon-finish"], { type: "draw", amount: 1 }, "抽 1 張牌。"),
+  tacticalObjective("moon-deploy-grave", "墓徑部署", "moon", "本回合部署 3 次。", "deploy", 3, ["sacrifice-draw"], { type: "summonToken", token: "wraith" }, "召喚 1 個亡魂。"),
+  tacticalObjective("moon-lane-grind", "歸魂控線", "moon", "在回合結束時控制 2 條戰線。", "controlLane", 2, ["revive-grind"], { type: "draw", amount: 2 }, "抽 2 張牌。"),
+  tacticalObjective("iron-deploy-formation", "鐵誓部署", "iron", "本回合部署 2 次。", "deploy", 2, ["relic-midrange"], { type: "shield", amount: 1 }, "為最佳友方召喚物賦予護盾。"),
+  tacticalObjective("iron-lane-fortress", "堡壘控線", "iron", "在回合結束時控制 2 條戰線。", "controlLane", 2, ["guard-wall"], { type: "buffAll", attack: 1, health: 1 }, "全部友方召喚物 +1/+1。"),
+];
+
 export const DECK_ARCHETYPES = [
   archetype("star-spell-chain-template", "星穹連式模板", "star", "star-spell-chain", "低費法術與抽牌連動，快速推進遠征。", ["spell-chain"], [["star-apprentice", 3], ["astral-bolt", 3], ["leyline-scribe", 3], ["stellar-lesson", 3], ["rune-curator", 3], ["starlit-aegis", 2], ["backline-astromancer", 2], ["meteor-study", 2], ["astral-marksman", 3], ["starbridge-weaver", 3], ["stellar-alignment", 2], ["trail-provisions", 1]]),
   archetype("star-secret-control-template", "鏡廳控制模板", "star", "star-secret-control", "秘儀與沉默壓制節奏，再靠抽牌拉開資源。", ["secret-control"], [["mirror-rune", 3], ["summon-snare", 3], ["counter-orbit", 3], ["void-lecturer", 3], ["null-glyph", 3], ["rune-curator", 2], ["starlit-aegis", 2], ["meteor-study", 2], ["astral-marksman", 3], ["prism-frontguard", 3], ["relic-surveyor", 3]]),
@@ -444,6 +463,10 @@ function archetype(id, name, summonerId, questId, description, tags, counts) {
   return { id, name, summonerId, questId, description, tags, cardIds: deckFromCounts(counts) };
 }
 
+function tacticalObjective(id, name, summonerId, conditionText, trigger, threshold, tags, reward, rewardText) {
+  return { id, name, summonerId, conditionText, trigger, threshold, tags, reward, rewardText };
+}
+
 function deckFromCounts(counts) {
   return counts.flatMap(([id, count]) => Array(count).fill(id));
 }
@@ -454,22 +477,35 @@ function firstQuestId(summonerId) {
 
 function defaultDeckCardIds(faction) {
   const rawFactionCards = BASE_CARDS.filter((item) => item.faction === faction);
-  const factionCards = [
+  const ordered = uniqueCards([
+    ...rawFactionCards.filter((item) => item.tags.includes("v13-deploy")),
     ...rawFactionCards.filter((item) => item.tags.includes("v12-position")),
     ...rawFactionCards.filter((item) => item.tags.includes("v11-tactics")),
     ...rawFactionCards.filter((item) => item.tags.includes("v1-system") && !item.tags.includes("v11-tactics") && !item.tags.includes("v12-position")),
     ...rawFactionCards.filter((item) => !item.tags.includes("v1-system") && !item.tags.includes("v11-tactics") && !item.tags.includes("v12-position")),
-  ];
-  const neutralCards = BASE_CARDS.filter((item) => item.faction === "neutral");
+    ...BASE_CARDS.filter((item) => item.faction === "neutral"),
+  ]);
   const cardIds = [];
-  for (const item of factionCards) cardIds.push(item.id, item.id, item.id);
-  for (const item of neutralCards) cardIds.push(item.id, item.id);
-  let index = 0;
-  while (cardIds.length < DECK_RULES.size) {
-    cardIds.push(factionCards[index % factionCards.length].id);
-    index += 1;
+  const counts = new Map();
+  for (const item of ordered) {
+    const limit = item.faction === "neutral" ? 2 : DECK_RULES.maxCopies;
+    while ((counts.get(item.id) ?? 0) < limit && cardIds.length < DECK_RULES.size) {
+      cardIds.push(item.id);
+      counts.set(item.id, (counts.get(item.id) ?? 0) + 1);
+    }
   }
   return cardIds.slice(0, DECK_RULES.size);
+}
+
+function uniqueCards(cards) {
+  const seen = new Set();
+  const result = [];
+  for (const card of cards) {
+    if (seen.has(card.id)) continue;
+    seen.add(card.id);
+    result.push(card);
+  }
+  return result;
 }
 
 function applyRepresentativeArt() {

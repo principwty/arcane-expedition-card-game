@@ -7,6 +7,7 @@ import {
   FACTION_THEMES,
   FACTION_LABELS,
   QUEST_LINES,
+  TACTICAL_OBJECTIVES,
   SUMMONERS,
   TOKENS,
   TYPE_LABELS,
@@ -48,6 +49,7 @@ export const SUPPORTED_EFFECTS = new Set([
   "expedition",
   "expeditionIfTargetDies",
   "expeditionOnKill",
+  "formationReward",
   "firstAttackBuff",
   "firstAttackExpedition",
   "firstDeathWraith",
@@ -60,11 +62,14 @@ export const SUPPORTED_EFFECTS = new Set([
   "healHero",
   "healOnBeast",
   "healTarget",
+  "moveMinion",
   "redirectAttack",
   "protectBackline",
+  "controlLaneBonus",
   "revive",
   "reviveOnDeath",
   "sacrificeDraw",
+  "swapMinions",
   "silenceMinion",
   "silenceSummoned",
   "spellDamage",
@@ -79,6 +84,7 @@ export const SUPPORTED_EFFECTS = new Set([
   "summonOnDeath",
   "summonToken",
   "temporaryBuff",
+  "onDeploy",
   "upgradeHeroPower",
   "wardSpellTarget",
 ]);
@@ -88,7 +94,9 @@ const FACTIONS = new Set(Object.keys(FACTION_LABELS));
 const TYPES = new Set(Object.keys(TYPE_LABELS));
 const RARITIES = new Set(["common", "rare", "token", "強化", "發現", "覺醒"]);
 const QUEST_TRIGGERS = new Set(["artifact", "death", "dragonSummon", "guardOrWardSummon", "heal", "heroDamage", "secretOrSilence", "spell", "summon", "undeadSummon"]);
+const OBJECTIVE_TRIGGERS = new Set(["controlLane", "deploy", "formation"]);
 const QUEST_REWARD_TYPES = new Set(["buffAll", "damageHero", "draw", "shield", "summonToken"]);
+const OBJECTIVE_REWARD_TYPES = new Set(["buffAll", "damageHero", "draw", "gainMana", "healHero", "shield", "summonToken"]);
 const SUPPORTED_KEYWORDS = new Set(["guard", "swift", "ward", "lifesteal", "overwhelm", "ranged", "vanguard", "support"]);
 const SUPPORTED_STATUSES = new Set(["silenced", "stunned", "cannotAttack", "deathrattleDisabled", "temporaryBuff"]);
 const OUTPUTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../outputs");
@@ -158,8 +166,10 @@ export function validateCards() {
   for (const summoner of SUMMONERS) {
     const quests = QUEST_LINES.filter((quest) => quest.summonerId === summoner.id);
     const archetypes = DECK_ARCHETYPES.filter((archetype) => archetype.summonerId === summoner.id);
+    const objectives = TACTICAL_OBJECTIVES.filter((objective) => objective.summonerId === summoner.id);
     if (quests.length !== 2) errors.push(`${summoner.name} 任務數量必須為 2，目前 ${quests.length}`);
     if (archetypes.length !== 2) errors.push(`${summoner.name} 打法模板數量必須為 2，目前 ${archetypes.length}`);
+    if (objectives.length !== 2) errors.push(`${summoner.name} 戰術目標數量必須為 2，目前 ${objectives.length}`);
   }
 
   for (const quest of QUEST_LINES) {
@@ -179,9 +189,18 @@ export function validateCards() {
     if (quest && quest.summonerId !== archetype.summonerId) errors.push(`${archetype.name} 指定跨職業任務 ${quest.name}`);
   }
 
+  for (const objective of TACTICAL_OBJECTIVES) {
+    if (!SUMMONERS.some((summoner) => summoner.id === objective.summonerId)) errors.push(`${objective.id} 戰術目標召喚師不存在`);
+    if (!OBJECTIVE_TRIGGERS.has(objective.trigger)) errors.push(`${objective.id} 戰術目標 trigger 不支援: ${objective.trigger}`);
+    if (!Number.isInteger(objective.threshold) || objective.threshold <= 0) errors.push(`${objective.id} 戰術目標 threshold 必須是正整數`);
+    if (!Array.isArray(objective.tags) || !objective.tags.length) errors.push(`${objective.id} 戰術目標缺少打法 tags`);
+    if (!OBJECTIVE_REWARD_TYPES.has(objective.reward?.type)) errors.push(`${objective.id} 戰術目標 reward 不支援: ${objective.reward?.type}`);
+    if (objective.reward?.token && !TOKENS[objective.reward.token]) errors.push(`${objective.id} 戰術目標 token 不存在: ${objective.reward.token}`);
+  }
+
   validateArtManifest(errors);
 
-  return { ok: errors.length === 0, errors, counts: { base: BASE_CARDS.length, evolution: EVOLUTION_CARDS.length, tokens: Object.keys(TOKENS).length, decks: Object.keys(DEFAULT_DECK_RECIPES).length, quests: QUEST_LINES.length, archetypes: DECK_ARCHETYPES.length, artAssets: collectArtPaths().length } };
+  return { ok: errors.length === 0, errors, counts: { base: BASE_CARDS.length, evolution: EVOLUTION_CARDS.length, tokens: Object.keys(TOKENS).length, decks: Object.keys(DEFAULT_DECK_RECIPES).length, quests: QUEST_LINES.length, archetypes: DECK_ARCHETYPES.length, objectives: TACTICAL_OBJECTIVES.length, artAssets: collectArtPaths().length } };
 }
 
 function validateArtManifest(errors) {
@@ -241,5 +260,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error(result.errors.map((error) => `- ${error}`).join("\n"));
     process.exit(1);
   }
-  console.log(`Card validation passed: ${result.counts.base} base, ${result.counts.evolution} evolution, ${result.counts.tokens} tokens, ${result.counts.decks} default decks, ${result.counts.quests} quests, ${result.counts.archetypes} archetypes, ${result.counts.artAssets} art assets.`);
+  console.log(`Card validation passed: ${result.counts.base} base, ${result.counts.evolution} evolution, ${result.counts.tokens} tokens, ${result.counts.decks} default decks, ${result.counts.quests} quests, ${result.counts.archetypes} archetypes, ${result.counts.objectives} objectives, ${result.counts.artAssets} art assets.`);
 }

@@ -1,4 +1,4 @@
-import { BASE_CARDS, DECK_ARCHETYPES, DEFAULT_DECK_RECIPES, EVOLUTION_CARDS, FACTION_LABELS, KEYWORD_LABELS, QUEST_LINES, TYPE_LABELS } from "../outputs/src/data.js";
+import { BASE_CARDS, DECK_ARCHETYPES, DEFAULT_DECK_RECIPES, EVOLUTION_CARDS, FACTION_LABELS, KEYWORD_LABELS, QUEST_LINES, TACTICAL_OBJECTIVES, TYPE_LABELS } from "../outputs/src/data.js";
 import { deckStats, validateDeckRecipe } from "../outputs/src/deck-utils.js";
 import { validateCards } from "./validate-cards.mjs";
 
@@ -13,6 +13,7 @@ console.log("# Arcane Expedition Content Report\n");
 console.log(`Validation: ${validation.ok ? "passed" : "failed"}`);
 console.log(`Base cards: ${BASE_CARDS.length}`);
 console.log(`Evolution cards: ${EVOLUTION_CARDS.length}`);
+console.log(`Tactical objectives: ${TACTICAL_OBJECTIVES.length}`);
 console.log(`Art assets: ${validation.counts.artAssets}\n`);
 
 console.log("## Faction Curves");
@@ -48,6 +49,12 @@ console.log("\n## Quest Lines");
 for (const quest of QUEST_LINES) {
   const support = BASE_CARDS.filter((card) => card.faction === quest.summonerId || card.faction === "neutral").filter((card) => card.tags.some((tag) => quest.tags.includes(tag))).length;
   console.log(`${FACTION_LABELS[quest.summonerId]} / ${quest.name} - ${quest.conditionText} - support ${support}`);
+}
+
+console.log("\n## Tactical Objectives");
+for (const objective of TACTICAL_OBJECTIVES) {
+  const support = BASE_CARDS.filter((card) => card.faction === objective.summonerId || card.faction === "neutral").filter((card) => card.tags.some((tag) => objective.tags.includes(tag))).length;
+  console.log(`${FACTION_LABELS[objective.summonerId]} / ${objective.name} - ${objective.conditionText} - support ${support}`);
 }
 
 console.log("\n## Archetype Templates");
